@@ -1,0 +1,20 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## cookies_c.dpatch by Devid Filoni <d.filoni@techemail.com>
+##
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: No description.
+
+@DPATCH@
+diff -urNad dillo-0.8.6~/src/cookies.c dillo-0.8.6/src/cookies.c
+--- dillo-0.8.6~/src/cookies.c	2006-03-29 20:48:13.000000000 +0200
++++ dillo-0.8.6/src/cookies.c	2008-05-13 22:13:56.000000000 +0200
+@@ -103,7 +103,8 @@
+    }
+ 
+    /* set close on exec */
+-   fcntl(fileno(F_in), F_SETFD, FD_CLOEXEC | fcntl(fileno(F_in), F_GETFD));
++   if (F_in)
++      fcntl(fileno(F_in), F_SETFD, FD_CLOEXEC | fcntl(fileno(F_in), F_GETFD));
+ 
+    return F_in;
+ }

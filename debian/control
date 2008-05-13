@@ -1,0 +1,17 @@
+Source: dillo
+Section: web
+Priority: extra
+Maintainer: Devid Filoni <d.filoni@techemail.com>
+Standards-Version: 3.7.3
+Build-Depends: debhelper (>= 5), libgtk1.2-dev, libglib1.2-dev, libpng12-dev, zlib1g-dev, libjpeg62-dev, automake1.4 | automaken, autoconf, autotools-dev, dpatch, libxft-dev, libssl-dev, sharutils
+Homepage: http://www.dillo.org
+
+Package: dillo
+Architecture: any
+Depends: ${shlibs:Depends}, wget
+Replaces: gzilla
+Conflicts: gzilla
+Provides: www-browser
+Description: Small and fast web browser
+ Dillo aims to be a multiplatform browser alternative that is small,
+ stable, developer-friendly, usable, very fast, and extensible.
