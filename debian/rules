@@ -23,6 +23,7 @@ endif
 configure: config.status
 config.status: patch
 	dh_testdir
+	cp -p config.h.in config.h.in.backup
 	./autogen.sh
 	./configure $(CONFFLAGS) \
 				--prefix=/usr \
@@ -42,6 +43,7 @@ clean: clean-patched unpatch
 clean-patched:
 	dh_testdir
 	dh_testroot
+	[ -f  config.h.in.backup ] && cp -p config.h.in.backup config.h.in
 	rm -f build-stamp configure-stamp
 	[ ! -f Makefile ] || $(MAKE) distclean
 	-rm -f `find . -name "*~"`
