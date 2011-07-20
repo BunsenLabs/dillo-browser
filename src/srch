@@ -4,14 +4,30 @@
 # Enjoy!
 # Jorge.-
 
-if [ ! $# = 1 ]; then
-  echo "Usage:"
-  echo "   srch <token>"
+if [ $# = 1 ]; then
+  FLAGS="-H"
+elif [ $# = 2 ]; then
+  FLAGS="-H $1"
+  shift 1
 else
-#  find "./" -name "*.[ch]" -print -exec grep $1 {} \;
-  egrep "$1" *.[ch]
-  egrep "$1" IO/*.[ch]
-  egrep -H "$1" ../dpi/*.[ch]
-  egrep -H "$1" ../dpid/*.[ch]
-  egrep -H "$1" ../dpip/*.[ch]
+  echo "Usage:"
+  echo "   srch [-options] <token>"
+  exit 0
 fi
+
+#  find "./" -name "*.[ch]" -print -exec grep $1 {} \;
+egrep $FLAGS "$1" *.[ch][ch]
+egrep $FLAGS "$1" *.[ch]
+egrep $FLAGS "$1" IO/*.[ch][ch]*
+egrep $FLAGS "$1" IO/*.[ch]
+egrep $FLAGS "$1" ../dpi/*.[ch]
+egrep $FLAGS "$1" ../dpi/*.[ch][ch]
+egrep $FLAGS "$1" ../dpid/*.[ch]
+egrep $FLAGS "$1" ../dpip/*.[ch]
+egrep $FLAGS "$1" ../dlib/*.[ch]
+
+#egrep $FLAGS "$1" dw/*[ch]
+#egrep $FLAGS "$1" lout/*[ch]
+egrep $FLAGS "$1" ../dw/*[ch]
+egrep $FLAGS "$1" ../lout/*[ch]
+

@@ -2,11 +2,11 @@
  * File: gif.c
  *
  * Copyright (C) 1997 Raph Levien <raph@acm.org>
- * Copyright (C) 2000-2002 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright (C) 2000-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
@@ -54,7 +54,7 @@
  */
 
 
-/* todo:
+/* TODO:
  * + Make sure to handle error cases gracefully (including aborting the
  * connection, if necessary).
  */
@@ -65,21 +65,15 @@
 #include <stdio.h>              /* for sprintf */
 #include <string.h>             /* for memcpy and memmove */
 
-#include <gtk/gtk.h>
 #include "msg.h"
-#include "image.h"
-#include "web.h"
+#include "image.hh"
 #include "cache.h"
 #include "dicache.h"
-#include "prefs.h"
-
-#define DEBUG_LEVEL 6
-#include "debug.h"
 
 #define INTERLACE      0x40
 #define LOCALCOLORMAP  0x80
 
-#define LM_to_uint(a,b)   ((((guchar)b)<<8)|((guchar)a))
+#define LM_to_uint(a,b)   ((((uchar_t)b)<<8)|((uchar_t)a))
 
 #define        MAXCOLORMAPSIZE         256
 #define        MAX_LWZ_BITS            12
@@ -88,52 +82,52 @@
 typedef struct _DilloGif {
    DilloImage *Image;
    DilloUrl *url;
-   gint version;
+   int version;
 
-   gint state;
+   int state;
    size_t Start_Ofs;
-   guint Flags;
+   uint_t Flags;
 
-   guchar input_code_size;
-   guchar *linebuf;
-   gint pass;
+   uchar_t input_code_size;
+   uchar_t *linebuf;
+   int pass;
 
-   guint y;
+   uint_t y;
 
    /* state for lwz_read_byte */
-   gint code_size;
+   int code_size;
 
    /* The original GifScreen from giftopnm */
-   guint Width;
-   guint Height;
+   uint_t Width;
+   uint_t Height;
    size_t ColorMap_ofs;
-   guint ColorResolution;
-   guint NumColors;
-   gint Background;
-   guint spill_line_index;
+   uint_t ColorResolution;
+   uint_t NumColors;
+   int Background;
+   uint_t spill_line_index;
 #if 0
-   guint AspectRatio;    /* AspectRatio (not used) */
+   uint_t AspectRatio;    /* AspectRatio (not used) */
 #endif
 
    /* Gif89 extensions */
-   gint transparent;
+   int transparent;
 #if 0
    /* None are used: */
-   gint delayTime;
-   gint inputFlag;
-   gint disposal;
+   int delayTime;
+   int inputFlag;
+   int disposal;
 #endif
 
    /* state for the new push-oriented decoder */
-   gint packet_size;       /* The amount of the data block left to process */
-   guint window;
-   gint bits_in_window;
-   guint last_code;        /* Last "compressed" code in the look up table */
-   guint line_index;
-   guchar **spill_lines;
-   gint num_spill_lines_max;
-   gint length[(1 << MAX_LWZ_BITS) + 1];
-   gint code_and_byte[(1 << MAX_LWZ_BITS) + 1];
+   int packet_size;       /* The amount of the data block left to process */
+   uint_t window;
+   int bits_in_window;
+   uint_t last_code;        /* Last "compressed" code in the look up table */
+   uint_t line_index;
+   uchar_t **spill_lines;
+   int num_spill_lines_max;
+   int length[(1 << MAX_LWZ_BITS) + 1];
+   int code_and_byte[(1 << MAX_LWZ_BITS) + 1];
 } DilloGif;
 
 /* Some invariants:
@@ -147,58 +141,19 @@ typedef struct _DilloGif {
 /*
  * Forward declarations
  */
-static void Gif_write(DilloGif *gif, void *Buf, guint BufSize);
+static void Gif_write(DilloGif *gif, void *Buf, uint_t BufSize);
 static void Gif_close(DilloGif *gif, CacheClient_t *Client);
-static size_t Gif_process_bytes(DilloGif *gif, const guchar *buf,
-                                gint bufsize, void *Buf);
-static DilloGif *Gif_new(DilloImage *Image, DilloUrl *url, gint version);
-static void Gif_callback(int Op, CacheClient_t *Client);
+static size_t Gif_process_bytes(DilloGif *gif, const uchar_t *buf,
+                                int bufsize, void *Buf);
 
-/* exported function */
-DwWidget *a_Gif_image(const char *Type, void *Ptr, CA_Callback_t *Call,
-                      void **Data);
-
-
-/*
- * MIME handler for "image/gif" type
- * (Sets Gif_callback as cache-client)
- */
-DwWidget *a_Gif_image(const char *Type, void *Ptr, CA_Callback_t *Call,
-                      void **Data)
-{
-   DilloWeb *web = Ptr;
-   DICacheEntry *DicEntry;
-
-   if ( !web->Image )
-      web->Image = a_Image_new(0, 0, NULL, prefs.bg_color);
-      /* todo: get the backgound color from the parent widget -- Livio. */
-
-   /* Add an extra reference to the Image (for dicache usage) */
-   a_Image_ref(web->Image);
-
-   DicEntry = a_Dicache_get_entry(web->url);
-   if ( !DicEntry ) {
-      /* Let's create an entry for this image... */
-      DicEntry = a_Dicache_add_entry(web->url);
-
-      /* ... and let the decoder feed it! */
-      *Data = Gif_new(web->Image, DicEntry->url, DicEntry->version);
-      *Call = (CA_Callback_t) Gif_callback;
-   } else {
-      /* Let's feed our client from the dicache */
-      a_Dicache_ref(DicEntry->url, DicEntry->version);
-      *Data = web->Image;
-      *Call = (CA_Callback_t) a_Dicache_callback;
-   }
-   return DW_WIDGET (web->Image->dw);
-}
 
 /*
  * Create a new gif structure for decoding a gif into a RGB buffer
  */
-static DilloGif *Gif_new(DilloImage *Image, DilloUrl *url, gint version)
+void *a_Gif_new(DilloImage *Image, DilloUrl *url, int version)
 {
-   DilloGif *gif = g_malloc(sizeof(DilloGif));
+   DilloGif *gif = dMalloc(sizeof(DilloGif));
+   _MSG("a_Gif_new: gif=%p\n", gif);
 
    gif->Image = Image;
    gif->url = url;
@@ -220,33 +175,56 @@ static DilloGif *Gif_new(DilloImage *Image, DilloUrl *url, gint version)
 }
 
 /*
+ * Free the gif-decoding data structure.
+ */
+static void Gif_free(DilloGif *gif)
+{
+   int i;
+
+   _MSG("Gif_free: gif=%p\n", gif);
+
+   dFree(gif->linebuf);
+   if (gif->spill_lines != NULL) {
+      for (i = 0; i < gif->num_spill_lines_max; i++)
+         dFree(gif->spill_lines[i]);
+      dFree(gif->spill_lines);
+   }
+   dFree(gif);
+}
+
+/*
  * This function is a cache client, it receives data from the cache
  * and dispatches it to the appropriate gif-processing functions
  */
-static void Gif_callback(int Op, CacheClient_t *Client)
+void a_Gif_callback(int Op, void *data)
 {
-   if ( Op )
-      Gif_close(Client->CbData, Client);
-   else
+   if (Op == CA_Send) {
+      CacheClient_t *Client = data;
       Gif_write(Client->CbData, Client->Buf, Client->BufSize);
+   } else if (Op == CA_Close) {
+      CacheClient_t *Client = data;
+      Gif_close(Client->CbData, Client);
+   } else if (Op == CA_Abort) {
+      Gif_free(data);
+   }
 }
 
 /*
  * Receive and process new chunks of GIF image data
  */
-static void Gif_write(DilloGif *gif, void *Buf, guint BufSize)
+static void Gif_write(DilloGif *gif, void *Buf, uint_t BufSize)
 {
-   guchar *buf;
-   gint bufsize, bytes_consumed;
+   uchar_t *buf;
+   int bufsize, bytes_consumed;
 
    /* Sanity checks */
    if (!Buf || !gif->Image || BufSize == 0)
       return;
 
-   buf = ((guchar *) Buf) + gif->Start_Ofs;
+   buf = ((uchar_t *) Buf) + gif->Start_Ofs;
    bufsize = BufSize - gif->Start_Ofs;
 
-   DEBUG_MSG(5, "Gif_write: %u bytes\n", BufSize);
+   _MSG("Gif_write: %u bytes\n", BufSize);
 
    /* Process the bytes in the input buffer. */
    bytes_consumed = Gif_process_bytes(gif, buf, bufsize, Buf);
@@ -255,7 +233,7 @@ static void Gif_write(DilloGif *gif, void *Buf, guint BufSize)
       return;
    gif->Start_Ofs += bytes_consumed;
 
-   DEBUG_MSG(5, "exit Gif_write, bufsize=%ld\n", (glong)bufsize);
+   _MSG("exit Gif_write, bufsize=%ld\n", (long)bufsize);
 }
 
 /*
@@ -263,20 +241,9 @@ static void Gif_write(DilloGif *gif, void *Buf, guint BufSize)
  */
 static void Gif_close(DilloGif *gif, CacheClient_t *Client)
 {
-   gint i;
-
-   DEBUG_MSG(5, "destroy gif %p\n", gif);
-
+   _MSG("Gif_close: destroy gif %p\n", gif);
    a_Dicache_close(gif->url, gif->version, Client);
-
-   g_free(gif->linebuf);
-
-   if (gif->spill_lines != NULL) {
-      for (i = 0; i < gif->num_spill_lines_max; i++)
-         g_free(gif->spill_lines[i]);
-      g_free(gif->spill_lines);
-   }
-   g_free(gif);
+   Gif_free(gif);
 }
 
 
@@ -290,7 +257,7 @@ static void Gif_close(DilloGif *gif, CacheClient_t *Client)
  * 0 = There wasn't enough bytes read yet to read the whole datablock
  * otherwise the size of the data blocks
  */
-static inline size_t Gif_data_blocks(const guchar *Buf, size_t BSize)
+static inline size_t Gif_data_blocks(const uchar_t *Buf, size_t BSize)
 {
    size_t Size = 0;
 
@@ -314,7 +281,7 @@ static inline size_t Gif_data_blocks(const guchar *Buf, size_t BSize)
  * 0 -- block not processed
  * otherwise the size of the extension label.
  */
-static inline size_t Gif_do_generic_ext(const guchar *Buf, size_t BSize)
+static inline size_t Gif_do_generic_ext(const uchar_t *Buf, size_t BSize)
 {
    size_t Size = Buf[0] + 1, DSize;
 
@@ -335,11 +302,11 @@ static inline size_t Gif_do_generic_ext(const guchar *Buf, size_t BSize)
  * ?
  */
 static inline size_t
- Gif_do_gc_ext(DilloGif *gif, const guchar *Buf, size_t BSize)
+ Gif_do_gc_ext(DilloGif *gif, const uchar_t *Buf, size_t BSize)
 {
    /* Graphic Control Extension */
    size_t Size = Buf[0] + 2;
-   guint Flags;
+   uint_t Flags;
 
    if (Size > BSize)
       return 0;
@@ -372,8 +339,8 @@ static inline size_t
  * Return value:
  *    TRUE when the extension is over
  */
-static size_t Gif_do_extension(DilloGif *gif, guint Label,
-                               const guchar *buf,
+static size_t Gif_do_extension(DilloGif *gif, uint_t Label,
+                               const uchar_t *buf,
                                size_t BSize)
 {
    switch (Label) {
@@ -384,8 +351,6 @@ static size_t Gif_do_extension(DilloGif *gif, guint Label,
       return Gif_data_blocks(buf, BSize);
 
    case Txt_Ext:                /* Plain text Extension */
-      /* This extension allows (rcm thinks) the image to be rendered as text.
-       */
    case App_Ext:                /* Application Extension */
    default:
       return Gif_do_generic_ext(buf, BSize);    /*Ignore Extension */
@@ -401,9 +366,9 @@ static size_t Gif_do_extension(DilloGif *gif, guint Label,
 static void Gif_lwz_init(DilloGif *gif)
 {
    gif->num_spill_lines_max = 1;
-   gif->spill_lines = g_malloc(sizeof(guchar *) * gif->num_spill_lines_max);
+   gif->spill_lines = dMalloc(sizeof(uchar_t *) * gif->num_spill_lines_max);
 
-   gif->spill_lines[0] = g_malloc(gif->Width);
+   gif->spill_lines[0] = dMalloc(gif->Width);
    gif->bits_in_window = 0;
 
    /* First code in table = clear_code +1
@@ -420,9 +385,9 @@ static void Gif_lwz_init(DilloGif *gif)
 /*
  * Send the image line to the dicache, also handling the interlacing.
  */
-static void Gif_emit_line(DilloGif *gif, const guchar *linebuf)
+static void Gif_emit_line(DilloGif *gif, const uchar_t *linebuf)
 {
-   a_Dicache_write(gif->Image, gif->url, gif->version, linebuf, 0, gif->y);
+   a_Dicache_write(gif->url, gif->version, linebuf, gif->y);
    if (gif->Flags & INTERLACE) {
       switch (gif->pass) {
       case 0:
@@ -461,19 +426,9 @@ static void Gif_emit_line(DilloGif *gif, const guchar *linebuf)
 }
 
 /*
- * I apologize for the large size of this routine and the goto error
- * construct - I almost _never_ do that. I offer the excuse of
- * optimizing for speed.
- *
- * RCM -- busted these down into smaller subroutines... still very hard to
- * read.
- */
-
-
-/*
  * Decode the packetized lwz bytes
  */
-static void Gif_literal(DilloGif *gif, guint code)
+static void Gif_literal(DilloGif *gif, uint_t code)
 {
    gif->linebuf[gif->line_index++] = code;
    if (gif->line_index >= gif->Width) {
@@ -489,14 +444,14 @@ static void Gif_literal(DilloGif *gif, guint code)
  * ?
  */
 /* Profiling reveals over half the GIF time is spent here: */
-static void Gif_sequence(DilloGif *gif, guint code)
+static void Gif_sequence(DilloGif *gif, uint_t code)
 {
-   guint o_index, o_size, orig_code;
-   guint sequence_length = gif->length[code];
-   guint line_index = gif->line_index;
-   gint num_spill_lines;
-   gint spill_line_index = gif->spill_line_index;
-   guchar *last_byte_ptr, *obuf;
+   uint_t o_index, o_size, orig_code;
+   uint_t sequence_length = gif->length[code];
+   uint_t line_index = gif->line_index;
+   int num_spill_lines;
+   int spill_line_index = gif->spill_line_index;
+   uchar_t *last_byte_ptr, *obuf;
 
    gif->length[gif->last_code + 1] = sequence_length + 1;
    gif->code_and_byte[gif->last_code + 1] = (code << 8);
@@ -517,14 +472,14 @@ static void Gif_sequence(DilloGif *gif, guint code)
          /* Allocate more spill lines. */
          spill_line_index = gif->num_spill_lines_max;
          gif->num_spill_lines_max = num_spill_lines << 1;
-         gif->spill_lines = g_realloc(gif->spill_lines,
+         gif->spill_lines = dRealloc(gif->spill_lines,
                                       gif->num_spill_lines_max *
-                                      sizeof(guchar *));
+                                      sizeof(uchar_t *));
 
          for (; spill_line_index < gif->num_spill_lines_max;
               spill_line_index++)
             gif->spill_lines[spill_line_index] =
-                g_malloc(gif->Width);
+                dMalloc(gif->Width);
       }
       spill_line_index = num_spill_lines - 1;
       obuf = gif->spill_lines[spill_line_index];
@@ -544,9 +499,9 @@ static void Gif_sequence(DilloGif *gif, guint code)
       /* Write o_size bytes to
        * obuf[o_index - o_size..o_index). */
       for (; o_size > 0 && o_index > 0; o_size--) {
-         guint code_and_byte = gif->code_and_byte[code];
+         uint_t code_and_byte = gif->code_and_byte[code];
 
-         DEBUG_MSG(5, "%d ", gif->code_and_byte[code] & 255);
+         _MSG("%d ", gif->code_and_byte[code] & 255);
 
          obuf[--o_index] = code_and_byte & 255;
          code = code_and_byte >> 8;
@@ -566,16 +521,16 @@ static void Gif_sequence(DilloGif *gif, guint code)
    }
    /* Ok, now we write the first byte of the sequence. */
    /* We are sure that the code is literal. */
-   DEBUG_MSG(5, "%d", code);
+   _MSG("%d", code);
    obuf[--o_index] = code;
    gif->code_and_byte[gif->last_code] |= code;
 
    /* Fix up the output if the original code was last_code. */
    if (orig_code == gif->last_code) {
       *last_byte_ptr = code;
-      DEBUG_MSG(5, " fixed (%d)!", code);
+      _MSG(" fixed (%d)!", code);
    }
-   DEBUG_MSG(5, "\n");
+   _MSG("\n");
 
    /* Output any full lines. */
    if (gif->line_index >= gif->Width) {
@@ -593,7 +548,7 @@ static void Gif_sequence(DilloGif *gif, guint code)
    if (num_spill_lines) {
       /* Swap the last spill line with the gif line, using
        * linebuf as the swap temporary. */
-      guchar *linebuf = gif->spill_lines[num_spill_lines - 1];
+      uchar_t *linebuf = gif->spill_lines[num_spill_lines - 1];
 
       gif->spill_lines[num_spill_lines - 1] = gif->linebuf;
       gif->linebuf = linebuf;
@@ -611,7 +566,7 @@ static void Gif_sequence(DilloGif *gif, guint code)
  *   < 0 on error
  *   -1 if the decompression code was not in the lookup table
  */
-static gint Gif_process_code(DilloGif *gif, guint code, guint clear_code)
+static int Gif_process_code(DilloGif *gif, uint_t code, uint_t clear_code)
 {
 
    /* A short table describing what to do with the code:
@@ -622,7 +577,7 @@ static gint Gif_process_code(DilloGif *gif, guint code, guint clear_code)
     */
    if (code < clear_code) {
       /* a literal code. */
-      DEBUG_MSG(5, "literal\n");
+      _MSG("literal\n");
       Gif_literal(gif, code);
       return 1;
    } else if (code >= clear_code + 2) {
@@ -633,11 +588,11 @@ static gint Gif_process_code(DilloGif *gif, guint code, guint clear_code)
       return 1;
    } else if (code == clear_code) {
       /* clear code. Resets the whole table */
-      DEBUG_MSG(5, "clear\n");
+      _MSG("clear\n");
       return 0;
    } else {
       /* end code. */
-      DEBUG_MSG(5, "end\n");
+      _MSG("end\n");
       return 2;
    }
 }
@@ -645,7 +600,7 @@ static gint Gif_process_code(DilloGif *gif, guint code, guint clear_code)
 /*
  * ?
  */
-static gint Gif_decode(DilloGif *gif, const guchar *buf, size_t bsize)
+static int Gif_decode(DilloGif *gif, const uchar_t *buf, size_t bsize)
 {
    /*
     * Data block processing.  The image stuff is a series of data blocks.
@@ -653,12 +608,12 @@ static gint Gif_decode(DilloGif *gif, const guchar *buf, size_t bsize)
     * of the data block.  0 == the last data block.
     */
    size_t bufsize, packet_size;
-   guint clear_code;
-   guint window;
-   gint bits_in_window;
-   guint code;
-   gint code_size;
-   guint code_mask;
+   uint_t clear_code;
+   uint_t window;
+   int bits_in_window;
+   uint_t code;
+   int code_size;
+   uint_t code_mask;
 
    bufsize = bsize;
 
@@ -678,7 +633,7 @@ static gint Gif_decode(DilloGif *gif, const guchar *buf, size_t bsize)
     */
    while (bufsize > 0) {
       /* lwz_bytes is the number of remaining lwz bytes in the packet. */
-      gint lwz_bytes = MIN(packet_size, bufsize);
+      int lwz_bytes = MIN(packet_size, bufsize);
 
       bufsize -= lwz_bytes;
       packet_size -= lwz_bytes;
@@ -695,7 +650,7 @@ static gint Gif_decode(DilloGif *gif, const guchar *buf, size_t bsize)
              * at the start of the window */
             code = (window >> (32 - bits_in_window)) & code_mask;
 
-            DEBUG_MSG(5, "code = %d, ", code);
+            _MSG("code = %d, ", code);
 
             bits_in_window -= code_size;
             switch (Gif_process_code(gif, code, clear_code)) {
@@ -758,17 +713,14 @@ static gint Gif_decode(DilloGif *gif, const guchar *buf, size_t bsize)
 /*
  * ?
  */
-static gint Gif_check_sig(DilloGif *gif, const guchar *ibuf, gint ibsize)
+static int Gif_check_sig(DilloGif *gif, const uchar_t *ibuf, int ibsize)
 {
    /* at beginning of file - read magic number */
    if (ibsize < 6)
       return 0;
-   if (strncmp(ibuf, "GIF", 3) != 0) {
-      gif->state = 999;
-      return 6;
-   }
-   if (strncmp(ibuf + 3, "87a", 3) != 0 &&
-       strncmp(ibuf + 3, "89a", 3) != 0) {
+   if (memcmp(ibuf, "GIF87a", 6) != 0 &&
+       memcmp(ibuf, "GIF89a", 6) != 0) {
+      MSG_WARN("\"%s\" is not a GIF file.\n", URL_STR(gif->url));
       gif->state = 999;
       return 6;
    }
@@ -784,14 +736,14 @@ static gint Gif_check_sig(DilloGif *gif, const guchar *ibuf, gint ibsize)
  */
 static inline size_t
  Gif_do_color_table(DilloGif *gif, void *Buf,
-                    const guchar *buf, size_t bsize, size_t CT_Size)
+                    const uchar_t *buf, size_t bsize, size_t CT_Size)
 {
    size_t Size = 3 * (1 << (1 + CT_Size));
 
    if (Size > bsize)
       return 0;
 
-   gif->ColorMap_ofs = (gulong) buf - (gulong) Buf;
+   gif->ColorMap_ofs = (ulong_t) buf - (ulong_t) Buf;
    gif->NumColors = (1 << (1 + CT_Size));
    return Size;
 }
@@ -801,13 +753,13 @@ static inline size_t
  * <Logical Screen> ::= Logical Screen Descriptor [Global Color Table]
  */
 static size_t Gif_get_descriptor(DilloGif *gif, void *Buf,
-                                 const guchar *buf, gint bsize)
+                                 const uchar_t *buf, int bsize)
 {
 
    /* screen descriptor */
    size_t Size = 7,           /* Size of descriptor */
           mysize;             /* Size of color table */
-   guchar Flags;
+   uchar_t Flags;
 
    if (bsize < 7)
       return 0;
@@ -838,9 +790,9 @@ static size_t Gif_get_descriptor(DilloGif *gif, void *Buf,
  * with the stuff at the header. For now, we punt...
  */
 static size_t Gif_do_img_desc(DilloGif *gif, void *Buf,
-                              const guchar *buf, size_t bsize)
+                              const uchar_t *buf, size_t bsize)
 {
-   guchar Flags;
+   uchar_t Flags;
    size_t Size = 9 + 1; /* image descriptor size + first byte of image data */
 
    if (bsize < 10)
@@ -848,7 +800,15 @@ static size_t Gif_do_img_desc(DilloGif *gif, void *Buf,
 
    gif->Width   = LM_to_uint(buf[4], buf[5]);
    gif->Height  = LM_to_uint(buf[6], buf[7]);
-   gif->linebuf = g_malloc(gif->Width);
+
+   /* check max image size */
+   if (gif->Width <= 0 || gif->Height <= 0 ||
+       gif->Width > IMAGE_MAX_AREA / gif->Height) {
+      MSG("Gif_do_img_desc: suspicious image size request %u x %u\n",
+          gif->Width, gif->Height);
+      gif->state = 999;
+      return 0;
+   }
 
    a_Dicache_set_parms(gif->url, gif->version, gif->Image,
                        gif->Width, gif->Height, DILLO_IMG_TYPE_INDEXED);
@@ -880,10 +840,11 @@ static size_t Gif_do_img_desc(DilloGif *gif, void *Buf,
    gif->y = 0;
    Gif_lwz_init(gif);
    gif->spill_line_index = 0;
+   gif->linebuf = dMalloc(gif->Width);
    gif->state = 3;              /*Process the lzw data next */
    if (gif->Image && gif->ColorMap_ofs) {
       a_Dicache_set_cmap(gif->url, gif->version, gif->Image,
-                         (guchar *) Buf + gif->ColorMap_ofs,
+                         (uchar_t *) Buf + gif->ColorMap_ofs,
                          gif->NumColors, 256, gif->transparent);
    }
    return Size;
@@ -917,10 +878,10 @@ static size_t Gif_do_img_desc(DilloGif *gif, void *Buf,
  * "consumed"
  */
 static size_t GIF_Block(DilloGif * gif, void *Buf,
-                        const guchar *buf, size_t bsize)
+                        const uchar_t *buf, size_t bsize)
 {
    size_t Size = 0, mysize;
-   guchar C;
+   uchar_t C;
 
    if (bsize < 1)
       return 0;
@@ -994,10 +955,10 @@ static size_t GIF_Block(DilloGif * gif, void *Buf,
  * State == 3 is special... this is inside of <Data> but all of the stuff in
  * there has been gotten and set up.  So we stream it outside.
  */
-static size_t Gif_process_bytes(DilloGif *gif, const guchar *ibuf,
-                                gint bufsize, void *Buf)
+static size_t Gif_process_bytes(DilloGif *gif, const uchar_t *ibuf,
+                                int bufsize, void *Buf)
 {
-   gint tmp_bufsize = bufsize;
+   int tmp_bufsize = bufsize;
    size_t mysize;
 
    switch (gif->state) {
@@ -1046,10 +1007,15 @@ static size_t Gif_process_bytes(DilloGif *gif, const guchar *ibuf,
       break;
    }
 
-   DEBUG_MSG(5, "Gif_process_bytes: final state %d, %ld bytes consumed\n",
-             gif->state, (glong)(bufsize - tmp_bufsize));
+   _MSG("Gif_process_bytes: final state %d, %ld bytes consumed\n",
+        gif->state, (long)(bufsize - tmp_bufsize));
 
    return bufsize - tmp_bufsize;
 }
+
+#else /* ENABLE_GIF */
+
+void *a_Gif_new() { return 0; }
+void a_Gif_callback() { return; }
 
 #endif /* ENABLE_GIF */

@@ -3,7 +3,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -12,23 +12,26 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*! \file
  * Main functions to set-up dpi information and to initialise sockets
  */
 #include <errno.h>
-#include <glib.h>
+#include <stdlib.h>             /* for exit */
+#include <fcntl.h>              /* for F_SETFD, F_GETFD, FD_CLOEXEC */
+
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/tcp.h>
+
 #include <unistd.h>
 #include "dpid_common.h"
 #include "dpid.h"
 #include "dpi.h"
 #include "dpi_socket_dir.h"
-#include "dpi_service.h"
 #include "misc_new.h"
 
 #include "../dpip/dpip.h"
@@ -36,59 +39,18 @@
 #define QUEUE 5
 
 volatile sig_atomic_t caught_sigchld = 0;
+char *SharedKey = NULL;
 
-/*! Close and remove the sockets in the
- * given dpi attribute list
+/*! Remove dpid_comm_keys file.
+ * This avoids that dillo instances connect to a stale port after dpid
+ * has exited (e.g. after a reboot).
  */
-void rm_dpi_sockets(struct dp *dpi_attr_list, int numdpis)
+void cleanup()
 {
-   gint i;
-
-   for (i = 0; i < numdpis; i++) {
-      a_Misc_close_fd(dpi_attr_list[i].socket);
-      (void) unlink(dpi_attr_list[i].sockpath);
-   }
-}
-
-/*! Close and remove inactive dpi sockets
- * \Return
- * Number of active dpis.
- */
-int rm_inactive_dpi_sockets(struct dp *dpi_attr_list, int numdpis)
-{
-   int i, active = 0;
-
-   for (i = 0; i < numdpis; i++) {
-      if (dpi_attr_list[i].pid == 1) {
-         a_Misc_close_fd(dpi_attr_list[i].socket);
-         (void) unlink(dpi_attr_list[i].sockpath);
-      } else
-         active++;
-   }
-   return (active);
-}
-
-/*! Remove sockets
- */
-void cleanup(char *socket_dir)
-{
-   DIR *dir;
-   struct dirent *dir_entry = NULL;
-   char *sockpath;
-
-   dir = opendir(socket_dir);
-   if (dir == NULL) {
-      ERRMSG("cleanup", "opendir", errno);
-      return;
-   }
-   while ( (dir_entry = readdir(dir)) != NULL ) {
-      if ( dir_entry->d_name[0] == '.' )
-         continue;
-      sockpath = g_strconcat(socket_dir, "/", dir_entry->d_name, NULL);
-      unlink(sockpath);
-      g_free(sockpath);
-   }
-   closedir(dir);
+   char *fname;
+   fname = dStrconcat(dGethomedir(), "/", dotDILLO_DPID_COMM_KEYS, NULL);
+   unlink(fname);
+   dFree(fname);
 }
 
 /*! Free memory used to describe
@@ -97,16 +59,12 @@ void cleanup(char *socket_dir)
 void free_dpi_attr(struct dp *dpi_attr)
 {
    if (dpi_attr->id != NULL) {
-      g_free(dpi_attr->id);
+      dFree(dpi_attr->id);
       dpi_attr->id = NULL;
    }
    if (dpi_attr->path != NULL) {
-      g_free(dpi_attr->path);
+      dFree(dpi_attr->path);
       dpi_attr->path = NULL;
-   }
-   if (dpi_attr->sockpath != NULL) {
-      g_free(dpi_attr->sockpath);
-      dpi_attr->sockpath = NULL;
    }
 }
 
@@ -123,72 +81,129 @@ void free_plugin_list(struct dp **dpi_attr_list_ptr, int numdpis)
    for (i = 0; i < numdpis; i++)
       free_dpi_attr(dpi_attr_list + i);
 
-   g_free(dpi_attr_list);
+   dFree(dpi_attr_list);
    *dpi_attr_list_ptr = NULL;
 }
 
-/*! \todo
- * Remove terminator and est_terminator unless we really want to clean up
- * on abnormal exit.
+/*! Free memory used by the services list
  */
-#if 0
+void free_services_list(Dlist *s_list)
+{
+   int i = 0;
+   struct service *s;
+
+   for (i=0; i < dList_length(s_list) ; i++) {
+      s = dList_nth_data(s_list, i);
+      dFree(s->name);
+   }
+   dList_free(s_list);
+}
+
 /*! Signal handler for SIGINT, SIGQUIT, and SIGTERM. Calls cleanup
  */
-void terminator(int sig)
+static void terminator(int sig)
 {
-   (void) signal(SIGCHLD, SIG_DFL);
+   (void) sig; /* suppress unused parameter warning */
    cleanup();
-   (void) signal(sig, SIG_DFL);
-   (void) raise(sig);
    _exit(0);
 }
 
 /*! Establish handler for termination signals
  * and register cleanup with atexit */
-void est_terminator(void)
+void est_dpi_terminator()
 {
    struct sigaction act;
    sigset_t block;
 
-   (void) sigemptyset(&block);
-   (void) sigaddset(&block, SIGINT);
-   (void) sigaddset(&block, SIGQUIT);
-   (void) sigaddset(&block, SIGTERM);
-   (void) sigaddset(&block, SIGSEGV);
+   sigemptyset(&block);
+   sigaddset(&block, SIGHUP);
+   sigaddset(&block, SIGINT);
+   sigaddset(&block, SIGQUIT);
+   sigaddset(&block, SIGTERM);
 
    act.sa_handler = terminator;
    act.sa_mask = block;
    act.sa_flags = 0;
 
-   if (sigaction(SIGINT, &act, NULL) ||
+   if (sigaction(SIGHUP, &act, NULL) ||
+       sigaction(SIGINT, &act, NULL) ||
        sigaction(SIGQUIT, &act, NULL) ||
-       sigaction(SIGTERM, &act, NULL) || sigaction(SIGSEGV, &act, NULL)) {
-      ERRMSG("est_terminator", "sigaction", errno);
+       sigaction(SIGTERM, &act, NULL)) {
+      ERRMSG("est_dpi_terminator", "sigaction", errno);
       exit(1);
    }
 
    if (atexit(cleanup) != 0) {
-      ERRMSG("est_terminator", "atexit", 0);
-      fprintf(stderr, "Hey! atexit failed, how did that happen?\n");
+      ERRMSG("est_dpi_terminator", "atexit", 0);
+      MSG_ERR("Hey! atexit failed, how did that happen?\n");
       exit(1);
    }
 }
-#endif
 
 /*! Identify a given file
  * Currently there is only one file type associated with dpis.
  * More file types will be added as needed
  */
-enum file_type get_file_type(gchar *file_name)
+enum file_type get_file_type(char *file_name)
 {
-   gchar *dot = strrchr(file_name, '.');
+   char *dot = strrchr(file_name, '.');
 
    if (dot && !strcmp(dot, ".dpi"))
       return DPI_FILE;             /* Any filename ending in ".dpi" */
    else {
-      fprintf(stderr, "get_file_type: Unknown file type for %s\n", file_name);
+      MSG_ERR("get_file_type: Unknown file type for %s\n", file_name);
       return UNKNOWN_FILE;
    }
+}
+
+/*! Get dpi directory path from dpidrc
+ * \Return
+ * dpi directory on success, NULL on failure
+ * \Important
+ * The dpi_dir definition in dpidrc must have no leading white space.
+ */
+char *get_dpi_dir(char *dpidrc)
+{
+   FILE *In;
+   int len;
+   char *rcline = NULL, *value = NULL, *p;
+
+   if ((In = fopen(dpidrc, "r")) == NULL) {
+      ERRMSG("dpi_dir", "fopen", errno);
+      MSG_ERR(" - %s\n", dpidrc);
+      return (NULL);
+   }
+
+   while ((rcline = dGetline(In)) != NULL) {
+      if (strncmp(rcline, "dpi_dir", 7) == 0)
+         break;
+      dFree(rcline);
+   }
+   fclose(In);
+
+   if (!rcline) {
+      ERRMSG("dpi_dir", "Failed to find a dpi_dir entry in dpidrc", 0);
+      MSG_ERR("Put your dillo plugins path in %s\n", dpidrc);
+      MSG_ERR("e.g. dpi_dir=/usr/local/lib/dillo/dpi\n");
+      MSG_ERR("with no leading spaces.\n");
+      value = NULL;
+   } else {
+      len = (int) strlen(rcline);
+      if (len && rcline[len - 1] == '\n')
+         rcline[len - 1] = 0;
+
+      if ((p = strchr(rcline, '='))) {
+         while (*++p == ' ');
+         value = dStrdup(p);
+      } else {
+         ERRMSG("dpi_dir", "strchr", 0);
+         MSG_ERR(" - '=' not found in %s\n", rcline);
+         value = NULL;
+      }
+   }
+
+   dFree(rcline);
+   return (value);
 }
 
 /*! Scans a service directory in dpi_dir and fills dpi_attr
@@ -206,18 +221,18 @@ int get_dpi_attr(char *dpi_dir, char *service, struct dp *dpi_attr)
    char *service_dir = NULL;
    struct stat statinfo;
    enum file_type ftype;
-   int retval = -1;
+   int ret = -1;
    DIR *dir_stream;
    struct dirent *dir_entry = NULL;
 
-   service_dir = g_strconcat(dpi_dir, "/", service, NULL);
+   service_dir = dStrconcat(dpi_dir, "/", service, NULL);
    if (stat(service_dir, &statinfo) == -1) {
       ERRMSG("get_dpi_attr", "stat", errno);
-      fprintf(stderr, "file=%s\n", service_dir);
-   } else if ( (dir_stream = opendir(service_dir)) == NULL) {
+      MSG_ERR("file=%s\n", service_dir);
+   } else if ((dir_stream = opendir(service_dir)) == NULL) {
       ERRMSG("get_dpi_attr", "opendir", errno);
    } else {
-      /* Scan the directory loking for dpi files.
+      /* Scan the directory looking for dpi files.
        * (currently there's only the dpi program, but in the future
        *  there may also be helper scripts.) */
       while ( (dir_entry = readdir(dir_stream)) != NULL) {
@@ -228,15 +243,15 @@ int get_dpi_attr(char *dpi_dir, char *service, struct dp *dpi_attr)
          switch (ftype) {
             case DPI_FILE:
                dpi_attr->path =
-                  g_strconcat(service_dir, "/", dir_entry->d_name, NULL);
-               dpi_attr->id = g_strdup(service);
-               dpi_attr->sockpath = NULL;
+                  dStrconcat(service_dir, "/", dir_entry->d_name, NULL);
+               dpi_attr->id = dStrdup(service);
+               dpi_attr->port = 0;
                dpi_attr->pid = 1;
                if (strstr(dpi_attr->path, ".filter") != NULL)
                   dpi_attr->filter = 1;
                else
                   dpi_attr->filter = 0;
-               retval = 0;
+               ret = 0;
                break;
             default:
                break;
@@ -244,12 +259,12 @@ int get_dpi_attr(char *dpi_dir, char *service, struct dp *dpi_attr)
       }
       closedir(dir_stream);
 
-      if (retval != 0)
-         fprintf(stderr,"get_dpi_attr: No dpi plug-in in %s/%s\n",
+      if (ret != 0)
+         MSG_ERR("get_dpi_attr: No dpi plug-in in %s/%s\n",
                  dpi_dir, service);
    }
-   g_free(service_dir);
-   return retval;
+   dFree(service_dir);
+   return ret;
 }
 
 /*! Register a service
@@ -264,49 +279,48 @@ int get_dpi_attr(char *dpi_dir, char *service, struct dp *dpi_attr)
 int register_service(struct dp *dpi_attr, char *service)
 {
    char *user_dpi_dir, *dpidrc, *user_service_dir, *dir = NULL;
-   int retval = -1;
+   int ret = -1;
 
-   /* g_get_home_dir makes it hard to test for mem leaks */
-   user_dpi_dir = g_strconcat(a_Misc_get_home(), "/", dotDILLO_DPI, NULL);
+   user_dpi_dir = dStrconcat(dGethomedir(), "/", dotDILLO_DPI, NULL);
    user_service_dir =
-       g_strconcat(a_Misc_get_home(), "/", dotDILLO_DPI, "/", service, NULL);
+       dStrconcat(dGethomedir(), "/", dotDILLO_DPI, "/", service, NULL);
 
-   dpidrc = g_strconcat(a_Misc_get_home(), "/", dotDILLO_DPIDRC, NULL);
-   if ( access(dpidrc, F_OK) == -1 ) {
-      if ( access(DPIDRC_SYS, F_OK) == -1 ) {
+   dpidrc = dStrconcat(dGethomedir(), "/", dotDILLO_DPIDRC, NULL);
+   if (access(dpidrc, F_OK) == -1) {
+      if (access(DPIDRC_SYS, F_OK) == -1) {
          ERRMSG("register_service", "Error ", 0);
-         fprintf(stderr, "\n - There is no %s or %s file\n", dpidrc,
+         MSG_ERR("\n - There is no %s or %s file\n", dpidrc,
                DPIDRC_SYS);
-         g_free(user_dpi_dir);
-         g_free(user_service_dir);
-         g_free(dpidrc);
+         dFree(user_dpi_dir);
+         dFree(user_service_dir);
+         dFree(dpidrc);
          return(-1);
       }
-      g_free(dpidrc);
-      dpidrc = g_strdup(DPIDRC_SYS);
+      dFree(dpidrc);
+      dpidrc = dStrdup(DPIDRC_SYS);
    }
 
    /* Check home dir for dpis */
    if (access(user_service_dir, F_OK) == 0) {
       get_dpi_attr(user_dpi_dir, service, dpi_attr);
-      retval = 0;
+      ret = 0;
    } else {                     /* Check system wide dpis */
       if ((dir = get_dpi_dir(dpidrc)) != NULL) {
          if (access(dir, F_OK) == 0) {
             get_dpi_attr(dir, service, dpi_attr);
-            retval = 0;
+            ret = 0;
          } else {
-            ERRMSG("register_service", "get_dpi_attr failed\n", 0);
+            ERRMSG("register_service", "get_dpi_attr failed", 0);
          }
       } else {
-         ERRMSG("register_service", "dpi_dir: Error getting dpi dir.\n", 0);
+         ERRMSG("register_service", "dpi_dir: Error getting dpi dir.", 0);
       }
    }
-   g_free(user_dpi_dir);
-   g_free(user_service_dir);
-   g_free(dpidrc);
-   g_free(dir);
-   return (retval);
+   dFree(user_dpi_dir);
+   dFree(user_service_dir);
+   dFree(dpidrc);
+   dFree(dir);
+   return ret;
 }
 
 /*!
@@ -320,39 +334,38 @@ int register_all(struct dp **attlist)
 {
    DIR *user_dir_stream, *sys_dir_stream;
    char *user_dpidir = NULL, *sys_dpidir = NULL, *dpidrc = NULL;
-   char *basename=NULL;
    struct dirent *user_dirent, *sys_dirent;
-   int j, st, not_in_user_list;
+   int st;
    int snum, usr_srv_num;
    size_t dp_sz = sizeof(struct dp);
 
    if (*attlist != NULL) {
-      ERRMSG("register_all", "attlist parameter should be NULL\n", 0);
+      ERRMSG("register_all", "attlist parameter should be NULL", 0);
       return -1;
    }
 
-   user_dpidir = g_strconcat(a_Misc_get_home(), "/", dotDILLO_DPI, NULL);
+   user_dpidir = dStrconcat(dGethomedir(), "/", dotDILLO_DPI, NULL);
    if (access(user_dpidir, F_OK) == -1) {
       /* no dpis in user's space */
-      g_free(user_dpidir);
+      dFree(user_dpidir);
       user_dpidir = NULL;
    }
-   dpidrc = g_strconcat(a_Misc_get_home(), "/", dotDILLO_DPIDRC, NULL);
+   dpidrc = dStrconcat(dGethomedir(), "/", dotDILLO_DPIDRC, NULL);
    if (access(dpidrc, F_OK) == -1) {
-      g_free(dpidrc);
-      dpidrc = g_strdup(DPIDRC_SYS);
+      dFree(dpidrc);
+      dpidrc = dStrdup(DPIDRC_SYS);
       if (access(dpidrc, F_OK) == -1) {
-         g_free(dpidrc);
+         dFree(dpidrc);
          dpidrc = NULL;
       }
    }
    if (!dpidrc || (sys_dpidir = get_dpi_dir(dpidrc)) == NULL)
       sys_dpidir = NULL;
-   g_free(dpidrc);
+   dFree(dpidrc);
 
    if (!user_dpidir && !sys_dpidir) {
       ERRMSG("register_all", "Fatal error ", 0);
-      fprintf(stderr, "\n - Can't find the directory for dpis.\n");
+      MSG_ERR("\n - Can't find the directory for dpis.\n");
       exit(1);
    }
 
@@ -362,7 +375,7 @@ int register_all(struct dp **attlist)
       while ((user_dirent = readdir(user_dir_stream)) != NULL) {
          if (user_dirent->d_name[0] == '.')
             continue;
-         *attlist = (struct dp *) g_realloc(*attlist, (snum + 1) * dp_sz);
+         *attlist = (struct dp *) dRealloc(*attlist, (snum + 1) * dp_sz);
          st=get_dpi_attr(user_dpidir, user_dirent->d_name, &(*attlist)[snum]);
          if (st == 0)
             snum++;
@@ -375,152 +388,264 @@ int register_all(struct dp **attlist)
       while ((sys_dirent = readdir(sys_dir_stream)) != NULL) {
          if (sys_dirent->d_name[0] == '.')
            continue;
-         not_in_user_list = 1;
-         for (j = 0; j < usr_srv_num; j++) {
-            basename = g_basename((*attlist)[j].path);
-            if (strcmp(sys_dirent->d_name, basename) == 0) {
-               not_in_user_list = 0;
-               break;
-            }
-         }
-         if (not_in_user_list) {
-            *attlist = (struct dp *) g_realloc(*attlist, (snum + 1) * dp_sz);
-            st=get_dpi_attr(sys_dpidir, sys_dirent->d_name, &(*attlist)[snum]);
-            if (st == 0)
-               snum++;
-         }
+         *attlist = (struct dp *) dRealloc(*attlist, (snum + 1) * dp_sz);
+         st=get_dpi_attr(sys_dpidir, sys_dirent->d_name, &(*attlist)[snum]);
+         if (st == 0)
+            snum++;
       }
       closedir(sys_dir_stream);
    }
 
-   g_free(sys_dpidir);
-   g_free(user_dpidir);
+   dFree(sys_dpidir);
+   dFree(user_dpidir);
 
-   /* todo: do we consider snum == 0 an error?
+   /* TODO: do we consider snum == 0 an error?
     *       (if so, we should return -1 )       */
    return (snum);
 }
 
-/*! Initialise the service request socket
+/*
+ * Compare two struct service pointers
+ * This function is used for sorting services
+ */
+static int services_alpha_comp(const struct service *s1,
+                               const struct service *s2)
+{
+   return -strcmp(s1->name, s2->name);
+}
+
+/*! Add services reading a dpidrc file
+ * each non empty or commented line has the form
+ * service = path_relative_to_dpidir
+ * \Return:
+ * \li Returns number of available services on success
+ * \li -1 on failure
+ */
+int fill_services_list(struct dp *attlist, int numdpis, Dlist **services_list)
+{
+   FILE *dpidrc_stream;
+   char *p, *line = NULL, *service, *path;
+   int i, st;
+   struct service *s;
+   char *user_dpidir = NULL, *sys_dpidir = NULL, *dpidrc = NULL;
+
+   user_dpidir = dStrconcat(dGethomedir(), "/", dotDILLO_DPI, NULL);
+   if (access(user_dpidir, F_OK) == -1) {
+      /* no dpis in user's space */
+      dFree(user_dpidir);
+      user_dpidir = NULL;
+   }
+   dpidrc = dStrconcat(dGethomedir(), "/", dotDILLO_DPIDRC, NULL);
+   if (access(dpidrc, F_OK) == -1) {
+      dFree(dpidrc);
+      dpidrc = dStrdup(DPIDRC_SYS);
+      if (access(dpidrc, F_OK) == -1) {
+         dFree(dpidrc);
+         dpidrc = NULL;
+      }
+   }
+   if (!dpidrc || (sys_dpidir = get_dpi_dir(dpidrc)) == NULL)
+      sys_dpidir = NULL;
+
+   if (!user_dpidir && !sys_dpidir) {
+      ERRMSG("fill_services_list", "Fatal error ", 0);
+      MSG_ERR("\n - Can't find the directory for dpis.\n");
+      exit(1);
+   }
+
+   if ((dpidrc_stream = fopen(dpidrc, "r")) == NULL) {
+      ERRMSG("fill_services_list", "popen failed", errno);
+      dFree(dpidrc);
+      dFree(sys_dpidir);
+      dFree(user_dpidir);
+      return (-1);
+   }
+
+   if (*services_list != NULL) {
+      ERRMSG("fill_services_list", "services_list parameter is not NULL", 0);
+      return -1;
+   }
+   *services_list = dList_new(8);
+
+   /* dpidrc parser loop */
+   for (;(line = dGetline(dpidrc_stream)) != NULL; dFree(line)) {
+      st = dParser_parse_rc_line(&line, &service, &path);
+      if (st < 0) {
+         MSG_ERR("dpid: Syntax error in %s: service=\"%s\" path=\"%s\"\n",
+                 dpidrc, service, path);
+         continue;
+      } else if (st != 0) {
+         continue;
+      }
+
+      _MSG("dpid: service=%s, path=%s\n", service, path);
+
+      /* ignore dpi_dir silently */
+      if (strcmp(service, "dpi_dir") == 0)
+         continue;
+
+      s = dNew(struct service, 1);
+      /* init services list entry */
+      s->name = dStrdup(service);
+      s->dp_index = -1;
+
+      dList_append(*services_list, s);
+      /* search the dpi for a service by its path */
+      for (i = 0; i < numdpis; i++)
+          if ((p = strstr(attlist[i].path, path)) && *(p - 1) == '/' &&
+              strlen(p) == strlen(path))
+             break;
+      /* if the dpi exist bind service and dpi */
+      if (i < numdpis)
+         s->dp_index = i;
+   }
+   fclose(dpidrc_stream);
+
+   dList_sort(*services_list, (dCompareFunc)services_alpha_comp);
+
+   dFree(dpidrc);
+   dFree(sys_dpidir);
+   dFree(user_dpidir);
+
+   return (dList_length(*services_list));
+}
+
+/*
+ * Return a socket file descriptor
+ * (useful to set socket options in a uniform way)
+ */
+static int make_socket_fd()
+{
+   int ret, one = 1;
+
+   if ((ret = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+      ERRMSG("make_socket_fd", "socket", errno);
+   } else {
+      /* avoid delays when sending small pieces of data */
+      setsockopt(ret, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+   }
+
+   /* set some buffering to increase the transfer's speed */
+   //setsockopt(sock_fd, SOL_SOCKET, SO_SNDBUF,
+   //           &sock_buflen, (socklen_t)sizeof(sock_buflen));
+
+   return ret;
+}
+
+/*! Bind a socket port on localhost. Try to be close to base_port.
+ * \Return
+ * \li listening socket file descriptor on success
+ * \li -1 on failure
+ */
+int bind_socket_fd(int base_port, int *p_port)
+{
+   int sock_fd, port;
+   struct sockaddr_in sin;
+   int ok = 0, last_port = base_port + 50;
+
+   if ((sock_fd = make_socket_fd()) == -1) {
+      return (-1);              /* avoids nested ifs */
+   }
+   /* Set the socket FD to close on exec */
+   fcntl(sock_fd, F_SETFD, FD_CLOEXEC | fcntl(sock_fd, F_GETFD));
+
+
+   memset(&sin, 0, sizeof(sin));
+   sin.sin_family = AF_INET;
+   sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+   /* Try to bind a port on localhost */
+   for (port = base_port; port <= last_port; ++port) {
+      sin.sin_port = htons(port);
+      if ((bind(sock_fd, (struct sockaddr *)&sin, sizeof(sin))) == -1) {
+         if (errno == EADDRINUSE || errno == EADDRNOTAVAIL)
+            continue;
+         ERRMSG("bind_socket_fd", "bind", errno);
+      } else if (listen(sock_fd, QUEUE) == -1) {
+         ERRMSG("bind_socket_fd", "listen", errno);
+      } else {
+         *p_port = port;
+         ok = 1;
+         break;
+      }
+   }
+   if (port > last_port) {
+      MSG_ERR("Hey! Can't find an available port from %d to %d\n",
+              base_port, last_port);
+   }
+
+   return ok ? sock_fd : -1;
+}
+
+/*! Save the current port and a shared secret in a file so dillo can find it.
+ * \Return:
+ * \li -1 on failure
+ */
+int save_comm_keys(int srs_port)
+{
+   int fd, ret = -1;
+   char *fname, port_str[32];
+
+   fname = dStrconcat(dGethomedir(), "/", dotDILLO_DPID_COMM_KEYS, NULL);
+   fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+   dFree(fname);
+   if (fd == -1) {
+      MSG("save_comm_keys: open %s\n", dStrerror(errno));
+   } else {
+      snprintf(port_str, 16, "%d %s\n", srs_port, SharedKey);
+      if (CKD_WRITE(fd, port_str) != -1 && CKD_CLOSE(fd) != -1) {
+         ret = 1;
+      }
+   }
+
+   return ret;
+}
+
+/*! Initialise the service request socket (IDS)
  * \Return:
  * \li Number of sockets (1 == success)
  * \li -1 on failure
  */
-int init_srs_socket(char *sockdir)
+int init_ids_srs_socket()
 {
-   int retval = -1;
-   struct sockaddr_un srs_sa;
-   size_t sun_path_len;
-   socklen_t addr_sz;
+   int srs_port, ret = -1;
 
-   srs_name = g_strconcat(sockdir, "/", SRS_NAME, NULL);
    FD_ZERO(&sock_set);
 
-   /* Initialise srs, service request socket on startup */
-   if ((srs = socket(AF_LOCAL, SOCK_STREAM, 0)) == -1) {
-      ERRMSG("init_srs_socket", "socket", errno);
-      return (retval);              /* avoids nesting ifs too deeply */
-   }
-   /* Set srs to close on exec */
-   fcntl(srs, F_SETFD, FD_CLOEXEC | fcntl(srs, F_GETFD));
-
-   srs_sa.sun_family = AF_LOCAL;
-
-   sun_path_len = sizeof(srs_sa.sun_path);
-   if ( strlen(srs_name) > sun_path_len) {
-      ERRMSG("init_srs_socket", "srs_name is too long", 0);
-      fprintf(stderr, "\n - it should be <= %lu chars", (gulong)sun_path_len);
-      fprintf(stderr, "\n - srs_name = %s\n", srs_name);
-      return(retval);
-   }
-   strncpy(srs_sa.sun_path, srs_name, sun_path_len);
-   addr_sz = (socklen_t) D_SUN_LEN(&srs_sa);
-
-   if ((bind(srs, (struct sockaddr *) &srs_sa, addr_sz)) == -1) {
-      if (errno == EADDRINUSE) {
-         ERRMSG("init_srs_socket", "bind", errno);
-         fprintf(stderr, "srs_sa.sun_path = %s\n", srs_sa.sun_path);
-         dpi_errno = dpid_srs_addrinuse;
-      } else {
-         ERRMSG("init_srs_socket", "bind", errno);
-         fprintf(stderr, "srs_sa.sun_path = %s\n", srs_sa.sun_path);
+   if ((srs_fd = bind_socket_fd(DPID_BASE_PORT, &srs_port)) != -1) {
+      /* create the shared secret */
+      SharedKey = a_Misc_mksecret(8);
+      /* save port number and SharedKey */
+      if (save_comm_keys(srs_port) != -1) {
+         FD_SET(srs_fd, &sock_set);
+         ret = 1;
       }
-   } else if (chmod(srs_sa.sun_path, S_IRUSR | S_IWUSR) == -1) {
-      ERRMSG("init_srs_socket", "chmod", errno);
-      fprintf(stderr, "srs_sa.sun_path = %s\n", srs_sa.sun_path);
-   } else if (listen(srs, QUEUE) == -1) {
-      ERRMSG("init_srs_socket", "listen", errno);
-   } else {
-      retval = 1;
    }
 
-   FD_SET(srs, &sock_set);
-   return (retval);
+   return ret;
 }
 
-/*! Initialise a single dpi socket
+/*! Initialize a single dpi socket
  * \Return
  * \li 1 on success
  * \li -1 on failure
  */
-int init_dpi_socket(struct dp *dpi_attr, char *sockdir)
+int init_dpi_socket(struct dp *dpi_attr)
 {
-   int caught_error = 0, s;
-   char *dpi_nm;                /* pointer to basename in dpi_attr->path */
-   struct sockaddr_un sa;
-   size_t sp_len;
-   socklen_t addr_sz;
-   size_t sock_buflen = 8192;
+   int s_fd, port, ret = -1;
 
-   sp_len = sizeof(sa.sun_path);
-   if ((s = socket(AF_LOCAL, SOCK_STREAM, 0)) == -1) {
-      ERRMSG("init_all_dpi_sockets", "socket", errno);
-      return (-1);              /* avoids nested ifs */
-   }
-   /* Set the socket FD to close on exec */
-   fcntl(s, F_SETFD, FD_CLOEXEC | fcntl(s, F_GETFD));
-
-   /* set some buffering to increase the transfer's speed */
-   setsockopt(s, SOL_SOCKET, SO_SNDBUF,
-              &sock_buflen, (socklen_t)sizeof(sock_buflen));
-
-   dpi_attr->socket = s;
-   dpi_attr->sa.sun_family = AF_LOCAL;
-   dpi_nm = g_basename(dpi_attr->path);
-
-   dpi_attr->sockpath = g_strconcat(sockdir, "/", dpi_nm, NULL);
-   if ( strlen(dpi_attr->sockpath) > sp_len) {
-      ERRMSG("init_all_dpi_sockets", "socket path is too long", 0);
-      fprintf(stderr, "\n - it should be <= %lu chars", (gulong)sp_len);
-      fprintf(stderr, "\n - socket path = %s\n", dpi_attr->sockpath);
-      return(-1);
-   }
-   strncpy(dpi_attr->sa.sun_path, dpi_attr->sockpath, sp_len);
-   addr_sz = (socklen_t) D_SUN_LEN(&dpi_attr->sa);
-
-   if ((bind(s, (struct sockaddr *) &dpi_attr->sa, addr_sz)) == -1) {
-      ERRMSG("init_all_dpi_sockets", "bind", errno);
-      fprintf(stderr, "%s\n", dpi_attr->sa.sun_path);
-      caught_error = 1;
-   } else if (chmod(dpi_attr->sa.sun_path, S_IRUSR | S_IWUSR) == -1) {
-      ERRMSG("init_all_dpi_sockets", "chmod", errno);
-      fprintf(stderr, "%s\n", dpi_attr->sa.sun_path);
-      caught_error = 1;
-   } else if (listen(s, QUEUE) == -1) {
-      ERRMSG("init_all_dpi_sockets", "listen", errno);
-      caught_error = 1;
+   if ((s_fd = bind_socket_fd(DPID_BASE_PORT, &port)) != -1) {
+      dpi_attr->sock_fd = s_fd;
+      dpi_attr->port = port;
+      FD_SET(s_fd, &sock_set);
+      ret = 1;
    }
 
-   if (caught_error) {
-      return (-1);
-   } else {
-      FD_SET(s, &sock_set);
-      return (1);
-   }
+   return ret;
 }
 
 /*! Setup sockets for the plugins and add them to
- * to the set of sockets (sock_set) watched by select.
+ * the set of sockets (sock_set) watched by select.
  * \Return
  * \li Number of sockets on success
  * \li -1 on failure
@@ -529,17 +654,13 @@ int init_dpi_socket(struct dp *dpi_attr, char *sockdir)
  * \Uses
  * numdpis, srs, srs_name
  */
-int init_all_dpi_sockets(struct dp *dpi_attr_list, char *sockdir)
+int init_all_dpi_sockets(struct dp *dpi_attr_list)
 {
    int i;
-   struct sockaddr_un sa;
-   size_t sp_len;
-
-   sp_len = sizeof(sa.sun_path);
 
    /* Initialise sockets for each dpi */
    for (i = 0; i < numdpis; i++) {
-      if (init_dpi_socket(dpi_attr_list + i, sockdir) == -1)
+      if (init_dpi_socket(dpi_attr_list + i) == -1)
          return (-1);
       numsocks++;
    }
@@ -551,13 +672,15 @@ int init_all_dpi_sockets(struct dp *dpi_attr_list, char *sockdir)
  */
 void dpi_sigchld(int sig)
 {
-   caught_sigchld = 1;
+   if (sig == SIGCHLD)
+      caught_sigchld = 1;
 }
 
 /*! Called by main loop when caught_sigchld == 1 */
 void handle_sigchld(void)
 {
-   int i, status;
+   // pid_t pid;
+   int i, status; //, num_active;
 
    /* For all of the dpis in the current list
     *    add the ones that have exited to the set of sockets being
@@ -566,7 +689,7 @@ void handle_sigchld(void)
    for (i = 0; i < numdpis; i++) {
       if (waitpid(dpi_attr_list[i].pid, &status, WNOHANG) > 0) {
          dpi_attr_list[i].pid = 1;
-         FD_SET(dpi_attr_list[i].socket, &sock_set);
+         FD_SET(dpi_attr_list[i].sock_fd, &sock_set);
          numsocks++;
       }
    }
@@ -592,45 +715,62 @@ void est_dpi_sigchld(void)
    }
 }
 
+/*! EINTR aware connect() call */
+int ckd_connect (int sock_fd, struct sockaddr *addr, socklen_t len)
+{
+   ssize_t ret;
+
+   do {
+      ret = connect(sock_fd, addr, len);
+   } while (ret == -1 && errno == EINTR);
+   if (ret == -1) {
+      ERRMSG("dpid.c", "connect", errno);
+   }
+   return ret;
+}
+
 /*! Send DpiBye command to all active non-filter dpis
  */
 void stop_active_dpis(struct dp *dpi_attr_list, int numdpis)
 {
-   static char *DpiBye_cmd = NULL;
-   int i, dpi_socket;
-   struct sockaddr_un dpi_addr;
-   struct sockaddr_un sa;
-   size_t sun_path_len, addr_len;
+   char *bye_cmd, *auth_cmd;
+   int i, sock_fd;
+   struct sockaddr_in sin;
 
-   if (!DpiBye_cmd)
-      DpiBye_cmd = a_Dpip_build_cmd("cmd=%s", "DpiBye");
+   bye_cmd = a_Dpip_build_cmd("cmd=%s", "DpiBye");
+   auth_cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "auth", SharedKey);
 
-   sun_path_len = sizeof(sa.sun_path);
-   addr_len = sizeof(dpi_addr);
-
-   dpi_addr.sun_family = AF_LOCAL;
+   memset(&sin, 0, sizeof(sin));
+   sin.sin_family = AF_INET;
+   sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
    for (i = 0; i < numdpis; i++) {
       /* Skip inactive dpis and filters */
       if (dpi_attr_list[i].pid == 1 || dpi_attr_list[i].filter)
          continue;
 
-      if ((dpi_socket = socket(AF_LOCAL, SOCK_STREAM, 0)) == -1) {
+      if ((sock_fd = make_socket_fd()) == -1) {
          ERRMSG("stop_active_dpis", "socket", errno);
+         continue;
       }
-      if ( strlen(dpi_attr_list[i].sockpath) > sun_path_len) {
-         ERRMSG("stop_active_dpis", "socket path is too long", 0);
-         fprintf(stderr,"\n - it should be <= %lu chars",(gulong)sun_path_len);
-         fprintf(stderr,"\n - socket path = %s\n", dpi_attr_list[i].sockpath);
-      }
-      strncpy(dpi_addr.sun_path, dpi_attr_list[i].sockpath, sun_path_len);
-      if (connect(dpi_socket, (struct sockaddr *) &dpi_addr, addr_len) == -1) {
+
+      sin.sin_port = htons(dpi_attr_list[i].port);
+      if (ckd_connect(sock_fd, (struct sockaddr *)&sin, sizeof(sin)) == -1) {
          ERRMSG("stop_active_dpis", "connect", errno);
-         fprintf(stderr, "%s\n", dpi_addr.sun_path);
+         MSG_ERR("%s\n", dpi_attr_list[i].path);
+      } else if (CKD_WRITE(sock_fd, auth_cmd) == -1) {
+         ERRMSG("stop_active_dpis", "write", errno);
+      } else if (CKD_WRITE(sock_fd, bye_cmd) == -1) {
+         ERRMSG("stop_active_dpis", "write", errno);
       }
-      (void) write(dpi_socket, DpiBye_cmd, strlen(DpiBye_cmd));
-      a_Misc_close_fd(dpi_socket);
+      a_Misc_close_fd(sock_fd);
    }
+
+   dFree(auth_cmd);
+   dFree(bye_cmd);
+
+   /* Allow child dpis some time to read dpid_comm_keys before erasing it */
+   sleep (1);
 }
 
 /*! Removes dpis in dpi_attr_list from the
@@ -642,8 +782,8 @@ void ignore_dpi_sockets(struct dp *dpi_attr_list, int numdpis)
    int i;
 
    for (i = 0; i < numdpis; i++) {
-      FD_CLR(dpi_attr_list[i].socket, &sock_set);
-      a_Misc_close_fd(dpi_attr_list[i].socket);
+      FD_CLR(dpi_attr_list[i].sock_fd, &sock_set);
+      a_Misc_close_fd(dpi_attr_list[i].sock_fd);
    }
 }
 
@@ -654,17 +794,19 @@ void ignore_dpi_sockets(struct dp *dpi_attr_list, int numdpis)
  * \Return
  * Number of available dpis
  */
-int register_all_cmd(char *sockdir)
+int register_all_cmd()
 {
    stop_active_dpis(dpi_attr_list, numdpis);
-   rm_dpi_sockets(dpi_attr_list, numdpis);
    free_plugin_list(&dpi_attr_list, numdpis);
+   free_services_list(services_list);
+   services_list = NULL;
    numdpis = 0;
    numsocks = 1;                /* the srs socket */
    FD_ZERO(&sock_set);
-   FD_SET(srs, &sock_set);
+   FD_SET(srs_fd, &sock_set);
    numdpis = register_all(&dpi_attr_list);
-   numsocks = init_all_dpi_sockets(dpi_attr_list, sockdir);
+   fill_services_list(dpi_attr_list, numdpis, &services_list);
+   numsocks = init_all_dpi_sockets(dpi_attr_list);
    return (numdpis);
 }
 
@@ -673,51 +815,65 @@ int register_all_cmd(char *sockdir)
  * \Return
  * message on success, NULL on failure
  */
-char *get_message(int sock, char *dpi_tag)
+char *get_message(int sock_fd, char *dpi_tag)
 {
    char *msg, *d_cmd;
 
-   msg = a_Dpip_get_attr(dpi_tag, strlen(dpi_tag), "msg");
+   msg = a_Dpip_get_attr(dpi_tag, "msg");
    if (msg == NULL) {
-      ERRMSG("get_message", "failed to parse msg\n", 0);
+      ERRMSG("get_message", "failed to parse msg", 0);
       d_cmd = a_Dpip_build_cmd("cmd=%s msg=%s",
                                "DpiError", "Failed to parse request");
-      (void) CKD_WRITE(sock, d_cmd);
-      g_free(d_cmd);
+      (void) CKD_WRITE(sock_fd, d_cmd);
+      dFree(d_cmd);
    }
    return (msg);
 }
 
-/*!
- * Send socket path that matches dpi_id to client
+/*
+ * Compare a struct service pointer and a service name
+ * This function is used for searching services by name
  */
-void send_sockpath(gint sock, gchar *dpi_tag, struct dp *dpi_attr_list)
+int service_match(const struct service *A, const char *B)
 {
-   gint i;
-   gchar *dpi_id;
-   char *d_cmd;
+   int A_len, B_len, len;
 
-   g_return_if_fail((dpi_id = get_message(sock, dpi_tag)) != NULL);
+   A_len = strlen(A->name);
+   B_len = strlen(B);
+   len = MAX (A_len, B_len);
 
-   for (i = 0; i < numdpis; i++)
-      if (strstr(dpi_attr_list[i].id, dpi_id))
-         break;
+   if (A->name[A_len - 1] == '*')
+      len = A_len - 1;
+
+   return(dStrncasecmp(A->name, B, len));
+}
+
+/*!
+ * Send socket port that matches dpi_id to client
+ */
+void send_sockport(int sock_fd, char *dpi_tag, struct dp *dpi_attr_list)
+{
+   int i;
+   char *dpi_id, *d_cmd, port_str[16];
+   struct service *serv;
+
+   dReturn_if_fail((dpi_id = get_message(sock_fd, dpi_tag)) != NULL);
+
+   serv = dList_find_custom(services_list,dpi_id,(dCompareFunc)service_match);
+
+   if (serv == NULL || (i = serv->dp_index) == -1)
+      for (i = 0; i < numdpis; i++)
+         if (!strncmp(dpi_attr_list[i].id, dpi_id,
+                      dpi_attr_list[i].id - strchr(dpi_attr_list[i].id, '.')))
+            break;
+
    if (i < numdpis) {
       /* found */
-      if (access(dpi_attr_list[i].path, F_OK) == -1) {
-         ERRMSG("send_sockpath", "access", errno);
-         fprintf(stderr, " - %s\n", dpi_attr_list[i].sockpath);
-         d_cmd = a_Dpip_build_cmd("cmd=%s msg=%s",
-                                  "DpiError", "Plugin currently unavailable");
-         (void) CKD_WRITE(sock, d_cmd);
-         g_free(d_cmd);
-      } else {
-         d_cmd = a_Dpip_build_cmd("cmd=%s msg=%s",
-                                  "send_data", dpi_attr_list[i].sockpath);
-         (void) CKD_WRITE(sock, d_cmd);
-         g_free(d_cmd);
-      }
+      snprintf(port_str, 8, "%d", dpi_attr_list[i].port);
+      d_cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "send_data", port_str);
+      (void) CKD_WRITE(sock_fd, d_cmd);
+      dFree(d_cmd);
    }
 
-   g_free(dpi_id);
+   dFree(dpi_id);
 }

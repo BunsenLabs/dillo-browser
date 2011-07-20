@@ -1,11 +1,11 @@
 /*
  * File: dns.c
  *
- * Copyright (C) 1999, 2000, 2001 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright (C) 1999-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
@@ -13,37 +13,32 @@
  * Non blocking pthread-handled Dns scheme
  */
 
-#include <pthread.h>
-#include <glib.h>
-
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <signal.h>
-#include <string.h>
-
-#include "msg.h"
-#include "dns.h"
-#include "list.h"
-
-#define DEBUG_LEVEL 5
-#include "debug.h"
-
 
 /*
  * Uncomment the following line for debugging or gprof profiling.
  */
 /* #undef D_DNS_THREADED */
 
-/*
- * Uncomment the following line for libc5 optimization
- */
-/* #define LIBC5 */
+#ifdef D_DNS_THREADED
+#  include <pthread.h>
+#endif
+
+
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "msg.h"
+#include "dns.h"
+#include "list.h"
+#include "timeout.hh"
 
 
 /* Maximum dns resolving threads */
@@ -55,55 +50,57 @@
 
 
 typedef struct {
-   gint channel;         /* Index of this channel [0 based] */
-   gboolean in_use;      /* boolean to tell if server is doing a lookup */
-   gboolean ip_ready;    /* boolean: is IP lookup done? */
-   GSList *addr_list;    /* IP address */
-   char *hostname;       /* Adress to resolve */
-   guint timeout_id;     /* gtk timeout function ID */
+   int channel;            /* Index of this channel [0 based] */
+   bool_t in_use;          /* boolean to tell if server is doing a lookup */
+   bool_t ip_ready;        /* boolean: is IP lookup done? */
+   Dlist *addr_list;       /* IP address */
+   char *hostname;         /* Adress to resolve */
+   int status;             /* errno code for resolving function */
 #ifdef D_DNS_THREADED
-   pthread_t th1;        /* Thread id */
+   pthread_t th1;          /* Thread id */
 #endif
 } DnsServer;
 
 typedef struct {
-   char *hostname;          /* host name for cache */
-   GSList *addr_list;       /* address of host */
+   char *hostname;         /* host name for cache */
+   Dlist *addr_list;       /* addresses of host */
 } GDnsCache;
 
 typedef struct {
-   gint channel;    /* -2 if waiting, otherwise index to dns_server[] */
-   char *hostname;  /* The one we're resolving */
-   ChainLink *Info; /* CCC info */
+   int channel;            /* -2 if waiting, otherwise index to dns_server[] */
+   char *hostname;         /* The one we're resolving */
+   DnsCallback_t cb_func;  /* callback function */
+   void *cb_data;          /* extra data for the callback function */
 } GDnsQueue;
 
 
 /*
  * Forward declarations
  */
-static gboolean Dns_timeout_client(gpointer data);
+static void Dns_timeout_client(void *data);
 
 /*
  * Local Data
  */
 static DnsServer dns_server[D_DNS_MAX_SERVERS];
-static gint num_servers;
+static int num_servers;
 static GDnsCache *dns_cache;
-static gint dns_cache_size, dns_cache_size_max;
+static int dns_cache_size, dns_cache_size_max;
 static GDnsQueue *dns_queue;
-static gint dns_queue_size, dns_queue_size_max;
-static gboolean ipv6_enabled;
+static int dns_queue_size, dns_queue_size_max;
 
 
 /* ----------------------------------------------------------------------
  *  Dns queue functions
  */
-static void Dns_queue_add(ChainLink *Info, gint channel, const char *hostname)
+static void Dns_queue_add(int channel, const char *hostname,
+                          DnsCallback_t cb_func, void *cb_data)
 {
    a_List_add(dns_queue, dns_queue_size, dns_queue_size_max);
-   dns_queue[dns_queue_size].Info = Info;
    dns_queue[dns_queue_size].channel = channel;
-   dns_queue[dns_queue_size].hostname = g_strdup(hostname);
+   dns_queue[dns_queue_size].hostname = dStrdup(hostname);
+   dns_queue[dns_queue_size].cb_func = cb_func;
+   dns_queue[dns_queue_size].cb_data = cb_data;
    dns_queue_size++;
 }
 
@@ -111,9 +108,9 @@ static void Dns_queue_add(ChainLink *Info, gint channel, const char *hostname)
  * Find hostname index in dns_queue
  * (if found, returns queue index; -1 if not)
  */
-static gint Dns_queue_find(const char *hostname)
+static int Dns_queue_find(const char *hostname)
 {
-   gint i;
+   int i;
 
    for (i = 0; i < dns_queue_size; i++)
       if (!strcmp(hostname, dns_queue[i].hostname))
@@ -127,13 +124,13 @@ static gint Dns_queue_find(const char *hostname)
  */
 static void Dns_queue_remove(int index)
 {
-   gint i;
+   int i;
 
-   DEBUG_MSG(2, "Dns_queue_remove: deleting client [%d] [queue_size=%d]\n",
-             index, dns_queue_size);
+   _MSG("Dns_queue_remove: deleting client [%d] [queue_size=%d]\n",
+        index, dns_queue_size);
 
    if (index < dns_queue_size) {
-      g_free(dns_queue[index].hostname);
+      dFree(dns_queue[index].hostname);
       --dns_queue_size;         /* you'll find out why ;-) */
       for (i = index; i < dns_queue_size; i++)
          dns_queue[i] = dns_queue[i + 1];
@@ -145,7 +142,7 @@ static void Dns_queue_remove(int index)
  *
 void Dns_queue_print()
 {
-   gint i;
+   int i;
 
    MSG("Queue: [");
    for (i = 0; i < dns_queue_size; i++)
@@ -155,29 +152,15 @@ void Dns_queue_print()
  */
 
 /*
- *  Given a CCC Info, remove its client
- */
-static void Dns_abort_by_ccc(ChainLink *Info)
-{
-   gint i;
-
-   for (i = 0; i < dns_queue_size; i++)
-      if (dns_queue[i].Info == Info) {
-         Dns_queue_remove(i);
-         break;
-      }
-}
-
-/*
  *  Add an IP/hostname pair to Dns-cache
  */
-static void Dns_cache_add(char *hostname, GSList *addr_list)
+static void Dns_cache_add(char *hostname, Dlist *addr_list)
 {
    a_List_add(dns_cache, dns_cache_size, dns_cache_size_max);
-   dns_cache[dns_cache_size].hostname = g_strdup(hostname);
+   dns_cache[dns_cache_size].hostname = dStrdup(hostname);
    dns_cache[dns_cache_size].addr_list = addr_list;
    ++dns_cache_size;
-   DEBUG_MSG(1, "Cache objects: %d\n", dns_cache_size);
+   _MSG("Cache objects: %d\n", dns_cache_size);
 }
 
 
@@ -186,21 +169,21 @@ static void Dns_cache_add(char *hostname, GSList *addr_list)
  */
 void a_Dns_init(void)
 {
-   gint i;
+   int i;
 
 #ifdef D_DNS_THREADED
-   DEBUG_MSG(5, "dillo_dns_init: Here we go! (threaded)\n");
+   MSG("dillo_dns_init: Here we go! (threaded)\n");
 #else
-   DEBUG_MSG(5, "dillo_dns_init: Here we go! (not threaded)\n");
+   MSG("dillo_dns_init: Here we go! (not threaded)\n");
 #endif
 
    dns_queue_size = 0;
    dns_queue_size_max = 16;
-   dns_queue = g_new(GDnsQueue, dns_queue_size_max);
+   dns_queue = dNew(GDnsQueue, dns_queue_size_max);
 
    dns_cache_size = 0;
    dns_cache_size_max = 16;
-   dns_cache = g_new(GDnsCache, dns_cache_size_max);
+   dns_cache = dNew(GDnsCache, dns_cache_size_max);
 
    num_servers = D_DNS_MAX_SERVERS;
 
@@ -211,22 +194,20 @@ void a_Dns_init(void)
       dns_server[i].ip_ready = FALSE;
       dns_server[i].addr_list = NULL;
       dns_server[i].hostname = NULL;
-      dns_server[i].timeout_id = 0;
+      dns_server[i].status = 0;
 #ifdef D_DNS_THREADED
       dns_server[i].th1 = (pthread_t) -1;
 #endif
    }
 
-   /* IPv6 test */
-   ipv6_enabled = FALSE;
 #ifdef ENABLE_IPV6
+   /* IPv6 test */
    {
       /* If the IPv6 address family is not available there is no point
          wasting time trying to connect to v6 addresses. */
       int fd = socket(AF_INET6, SOCK_STREAM, 0);
       if (fd >= 0) {
          close(fd);
-         ipv6_enabled = TRUE;
       }
    }
 #endif
@@ -235,130 +216,138 @@ void a_Dns_init(void)
 /*
  * Allocate a host structure and add it to the list
  */
-static GSList *Dns_note_hosts(GSList *list, int af, struct hostent *host)
-{
-   int i;
 
-   if (host->h_length > DILLO_ADDR_MAX)
-      return list;
-   for (i = 0; host->h_addr_list[i]; i++) {
-      DilloHost *dh = g_new0(DilloHost, 1);
-      dh->af = af;
-      dh->alen = host->h_length;
-      memcpy(&dh->data[0], host->h_addr_list[i], (size_t)host->h_length);
-      list = g_slist_append(list, dh);
+static void Dns_note_hosts(Dlist *list, struct addrinfo *res0)
+{
+   struct addrinfo *res;
+   DilloHost *dh;
+
+   for (res = res0; res; res = res->ai_next) {
+
+      if (res->ai_family == AF_INET) {
+         struct sockaddr_in *in_addr;
+
+         if (res->ai_addrlen < sizeof(struct sockaddr_in)) {
+            continue;
+         }
+
+         dh = dNew0(DilloHost, 1);
+         dh->af = AF_INET;
+
+         in_addr = (struct sockaddr_in*) res->ai_addr;
+         dh->alen = sizeof (struct in_addr);
+         memcpy(&dh->data[0], &in_addr->sin_addr.s_addr, dh->alen);
+
+         dList_append(list, dh);
+#ifdef ENABLE_IPV6
+      } else if (res->ai_family == AF_INET6) {
+         struct sockaddr_in6 *in6_addr;
+
+         if (res->ai_addrlen < sizeof(struct sockaddr_in6)) {
+            continue;
+         }
+
+         dh = dNew0(DilloHost, 1);
+         dh->af = AF_INET6;
+
+         in6_addr = (struct sockaddr_in6*) res->ai_addr;
+         dh->alen = sizeof (struct in6_addr);
+         memcpy(&dh->data[0], &in6_addr->sin6_addr.s6_addr, dh->alen);
+
+         dList_append(list, dh);
+#endif
+      }
    }
-   return list;
 }
 
-#ifdef D_DNS_THREADED
 /*
  *  Server function (runs on its own thread)
  */
 static void *Dns_server(void *data)
 {
-   struct hostent *host;
-   gint channel = GPOINTER_TO_INT(data);
-#ifdef LIBC5
-   gint h_err;
-   char buff[1024];
-   struct hostent sh;
+   int channel = VOIDP2INT(data);
+   struct addrinfo hints, *res0;
+   int error;
+   Dlist *hosts;
+   size_t length, i;
+   char addr_string[40];
+
+   memset(&hints, 0, sizeof(hints));
+   hints.ai_family = AF_UNSPEC;
+   hints.ai_socktype = SOCK_STREAM;
+
+   hosts = dList_new(2);
+
+   _MSG("Dns_server: starting...\n ch: %d host: %s\n",
+        channel, dns_server[channel].hostname);
+
+   error = getaddrinfo(dns_server[channel].hostname, NULL, &hints, &res0);
+
+   if (error != 0) {
+      dns_server[channel].status = error;
+      if (error == EAI_NONAME)
+         MSG("DNS error: HOST_NOT_FOUND\n");
+      else if (error == EAI_AGAIN)
+         MSG("DNS error: TRY_AGAIN\n");
+#ifdef EAI_NODATA
+      /* Some FreeBSD don't have this anymore */
+      else if (error == EAI_NODATA)
+         MSG("DNS error: NO_ADDRESS\n");
 #endif
-   GSList *hosts = NULL;
-
-   DEBUG_MSG(3, "Dns_server: starting...\n ch: %d host: %s\n",
-             channel, dns_server[channel].hostname);
-
-#ifdef ENABLE_IPV6
-   if (ipv6_enabled) {
-      host = gethostbyname2(dns_server[channel].hostname, AF_INET6);
-      if (host)
-         hosts = Dns_note_hosts(hosts, AF_INET6, host);
+      else if (h_errno == EAI_FAIL)
+         MSG("DNS error: NO_RECOVERY\n");
+   } else {
+      Dns_note_hosts(hosts, res0);
+      dns_server[channel].status = 0;
+      freeaddrinfo(res0);
    }
-#endif
 
-#ifdef LIBC5
-   host = gethostbyname_r(dns_server[channel].hostname, &sh, buff,
-                          sizeof(buff), &h_err);
-#else
-   host = gethostbyname(dns_server[channel].hostname);
-#endif
+   if (dList_length(hosts) > 0) {
+      dns_server[channel].status = 0;
+   } else {
+      dList_free(hosts);
+      hosts = NULL;
+   }
 
-   if (host)
-      hosts = Dns_note_hosts(hosts, AF_INET, host);
-
-   /* write hostname to client */
-   DEBUG_MSG(5, "Dns_server [%d]: %s is %p\n", channel,
-             dns_server[channel].hostname, hosts);
+   /* tell our findings */
+   MSG("Dns_server [%d]: %s is", channel,
+       dns_server[channel].hostname);
+   if ((length = dList_length(hosts))) {
+      for (i = 0; i < length; i++) {
+         a_Dns_dillohost_to_string(dList_nth_data(hosts, i),
+                                   addr_string, sizeof(addr_string));
+         MSG(" %s", addr_string);
+      }
+      MSG("\n");
+   } else {
+      MSG(" (nil)\n");
+   }
    dns_server[channel].addr_list = hosts;
    dns_server[channel].ip_ready = TRUE;
 
    return NULL;                 /* (avoids a compiler warning) */
 }
-#endif
 
-#ifndef D_DNS_THREADED
-/*
- *  Blocking server-function (it doesn't use threads)
- */
-static void Dns_blocking_server(void)
-{
-   gint channel = 0;
-   struct hostent *host = NULL;
-   GSList *hosts = NULL;
-
-   DEBUG_MSG(3, "Dns_blocking_server: starting...\n");
-   DEBUG_MSG(3, "Dns_blocking_server: dns_server[%d].hostname = %s\n",
-             channel, dns_server[channel].hostname);
-
-#ifdef ENABLE_IPV6
-   if (ipv6_enabled) {
-      host = gethostbyname2(dns_server[channel].hostname, AF_INET6);
-      if (host)
-         hosts = Dns_note_hosts(hosts, AF_INET6, host);
-   }
-#endif
-
-   if (!host) {
-      host = gethostbyname(dns_server[channel].hostname);
-      if (host == NULL) {
-         DEBUG_MSG(3, "--> Dns_blocking_server: gethostbyname NULL return\n");
-      } else {
-         DEBUG_MSG(3, "--> Dns_blocking_server - good return\n");
-         hosts = Dns_note_hosts(hosts, AF_INET, host);
-      }
-   }
-
-   /* write IP to server data channel */
-   DEBUG_MSG(3, "Dns_blocking_server: IP of %s is %p\n",
-             dns_server[channel].hostname, hosts);
-   dns_server[channel].addr_list = hosts;
-   dns_server[channel].ip_ready = TRUE;
-
-   DEBUG_MSG(3, "Dns_blocking_server: leaving...\n");
-}
-#endif
 
 /*
  *  Request function (spawn a server and let it handle the request)
  */
-static void Dns_server_req(gint channel, const char *hostname)
+static void Dns_server_req(int channel, const char *hostname)
 {
 #ifdef D_DNS_THREADED
    static pthread_attr_t thrATTR;
-   static gint thrATTRInitialized = 0;
+   static int thrATTRInitialized = 0;
 #endif
 
    dns_server[channel].in_use = TRUE;
    dns_server[channel].ip_ready = FALSE;
 
-   g_free(dns_server[channel].hostname);
-   dns_server[channel].hostname = g_strdup(hostname);
+   dFree(dns_server[channel].hostname);
+   dns_server[channel].hostname = dStrdup(hostname);
 
    /* Let's set a timeout client to poll the server channel (5 times/sec) */
-   dns_server[channel].timeout_id =
-      gtk_timeout_add(200, (GtkFunction)Dns_timeout_client,
-                      GINT_TO_POINTER(dns_server[channel].channel));
+   a_Timeout_add(0.2,Dns_timeout_client,
+                 INT2VOIDP(dns_server[channel].channel));
 
 #ifdef D_DNS_THREADED
    /* set the thread attribute to the detached state */
@@ -369,38 +358,38 @@ static void Dns_server_req(gint channel, const char *hostname)
    }
    /* Spawn thread */
    pthread_create(&dns_server[channel].th1, &thrATTR, Dns_server,
-                  GINT_TO_POINTER(dns_server[channel].channel));
+                  INT2VOIDP(dns_server[channel].channel));
 #else
-   Dns_blocking_server();
+   Dns_server(0);
 #endif
 }
 
 /*
- * Return the IP for the given hostname.
- * Side effect: a thread can be spawned later.
+ * Return the IP for the given hostname using a callback.
+ * Side effect: a thread is spawned when hostname is not cached.
  */
-static void Dns_lookup(ChainLink *Info, const char *hostname)
+void a_Dns_resolve(const char *hostname, DnsCallback_t cb_func, void *cb_data)
 {
-   gint i, channel;
+   int i, channel;
 
-   g_return_if_fail (hostname != NULL);
+   if (!hostname)
+      return;
 
    /* check for cache hit. */
    for (i = 0; i < dns_cache_size; i++)
       if (!strcmp(hostname, dns_cache[i].hostname))
          break;
 
-   /* if it hits already resolved, call the Callback inmediately. */
    if (i < dns_cache_size) {
-      a_Dns_ccc(OpSend, 1, FWD, Info, dns_cache[i].addr_list, NULL);
-      a_Dns_ccc(OpEnd, 1, FWD, Info, NULL, NULL);
-      return;
-   }
-   if ((i = Dns_queue_find(hostname)) != -1) {
+      /* already resolved, call the Callback immediately. */
+      cb_func(0, dns_cache[i].addr_list, cb_data);
+
+   } else if ((i = Dns_queue_find(hostname)) != -1) {
       /* hit in queue, but answer hasn't come back yet. */
-      Dns_queue_add(Info, dns_queue[i].channel, hostname);
+      Dns_queue_add(dns_queue[i].channel, hostname, cb_func, cb_data);
+
    } else {
-      /* Never requested before -- we must solve it! */
+      /* Never requested before -- we must resolve it! */
 
       /* Find a channel we can send the request to */
       for (channel = 0; channel < num_servers; channel++)
@@ -408,11 +397,11 @@ static void Dns_lookup(ChainLink *Info, const char *hostname)
             break;
       if (channel < num_servers) {
          /* Found a free channel! */
-         Dns_queue_add(Info, channel, hostname);
+         Dns_queue_add(channel, hostname, cb_func, cb_data);
          Dns_server_req(channel, hostname);
       } else {
          /* We'll have to wait for a thread to finish... */
-         Dns_queue_add(Info, -2, hostname);
+         Dns_queue_add(-2, hostname, cb_func, cb_data);
       }
    }
 }
@@ -420,21 +409,15 @@ static void Dns_lookup(ChainLink *Info, const char *hostname)
 /*
  * Give answer to all queued callbacks on this channel
  */
-static void Dns_serve_channel(gint channel)
+static void Dns_serve_channel(int channel)
 {
-   gint i;
-   ChainLink *Info;
+   int i;
    DnsServer *srv = &dns_server[channel];
 
    for (i = 0; i < dns_queue_size; i++) {
       if (dns_queue[i].channel == channel) {
-         Info = dns_queue[i].Info;
-         if ( srv->addr_list == NULL ) {
-            a_Dns_ccc(OpAbort, 1, FWD, Info, NULL, NULL);
-         } else {
-            a_Dns_ccc(OpSend, 1, FWD, Info, srv->addr_list, NULL);
-            a_Dns_ccc(OpEnd, 1, FWD, Info, NULL, NULL);
-         }
+         dns_queue[i].cb_func(srv->status, srv->addr_list,
+                              dns_queue[i].cb_data);
          Dns_queue_remove(i);
          --i;
       }
@@ -448,7 +431,7 @@ static void Dns_serve_channel(gint channel)
  */
 static void Dns_assign_channels(void)
 {
-   gint ch, i, j;
+   int ch, i, j;
 
    for (ch = 0; ch < num_servers; ++ch) {
       if (dns_server[ch].in_use == FALSE) {
@@ -472,87 +455,63 @@ static void Dns_assign_channels(void)
 }
 
 /*
- * This is a Gtk+ timeout function that
+ * This is a timeout function that
  * reads the DNS results and resumes the stopped jobs.
  */
-static gboolean Dns_timeout_client(gpointer data)
+static void Dns_timeout_client(void *data)
 {
-   gint channel = GPOINTER_TO_INT(data);
+   int channel = VOIDP2INT(data);
    DnsServer *srv = &dns_server[channel];
 
-   if ( srv->ip_ready ){
+   if (srv->ip_ready) {
       if (srv->addr_list != NULL) {
          /* DNS succeeded, let's cache it */
          Dns_cache_add(srv->hostname, srv->addr_list);
       }
       Dns_serve_channel(channel);
       Dns_assign_channels();
-      srv->timeout_id = 0;
-      return FALSE;  /* Done! */
-   }
+      a_Timeout_remove(); /* Done! */
 
-   /* IP not already solved, keep on trying... */
-   return TRUE;
-}
-
-/*
- * CCC function for the DNS module
- * ( Data1 = hostname | IP; Data2 = {Not used here} )
- */
-void a_Dns_ccc(int Op, int Branch, int Dir, ChainLink *Info,
-               void *Data1, void *Data2)
-{
-   gchar *Hostname;
-
-   if ( Branch == 1 ){
-      if (Dir == BCK) {
-         /* Solve hostname */
-         switch (Op) {
-         case OpStart:
-            Hostname = g_strdup(Data1 ? (gchar *)Data1 : "");
-            Info->LocalKey = Hostname;
-            Dns_lookup(Info, Hostname);
-            break;
-         case OpAbort:
-            Dns_abort_by_ccc(Info);
-            g_free(Info->LocalKey);
-            g_free(Info);
-            break;
-         }
-      } else {  /* FWD */
-         /* Solve hostname answer */
-         switch (Op) {
-         case OpSend:
-            a_Chain_fcb(OpSend, Info, Data1, NULL);
-            break;
-         case OpEnd:
-            Hostname = Info->LocalKey;
-            a_Chain_fcb(OpEnd, Info, NULL, NULL);
-            g_free(Hostname);
-            break;
-         case OpAbort:
-            Hostname = Info->LocalKey;
-            a_Chain_fcb(OpAbort, Info, NULL, NULL);
-            g_free(Hostname);
-            break;
-         }
-      }
+   } else {
+      /* IP not already resolved, keep on trying... */
+      a_Timeout_repeat(0.2, Dns_timeout_client, data);
    }
 }
+
 
 /*
  *  Dns memory-deallocation
  *  (Call this one at exit time)
  *  The Dns_queue is deallocated at execution time (no need to do that here)
- *  'dns_cache' is the only one that grows dinamically
+ *  'dns_cache' is the only one that grows dynamically
  */
 void a_Dns_freeall(void)
 {
-   gint i;
+   int i, j;
 
    for ( i = 0; i < dns_cache_size; ++i ){
-      g_free(dns_cache[i].hostname);
+      dFree(dns_cache[i].hostname);
+      for ( j = 0; j < dList_length(dns_cache[i].addr_list); ++j)
+         dFree(dList_nth_data(dns_cache[i].addr_list, j));
+      dList_free(dns_cache[i].addr_list);
    }
-   g_free(dns_cache);
+   dFree(dns_cache);
 }
 
+/*
+ *  Writes a string representation of the given DilloHost
+ *  into dst. dst will be \0 terminated.
+ *  Please note that dst must be at least 40 bytes long for IPv6
+ *  addresses.
+ */
+void a_Dns_dillohost_to_string(DilloHost *host, char *dst, size_t size)
+{
+   if (!inet_ntop(host->af, host->data, dst, size)) {
+      switch (errno) {
+         case EAFNOSUPPORT:
+            snprintf(dst, size, "Unknown address family");
+         case ENOSPC:
+            snprintf(dst, size, "Buffer too small");
+      }
+   }
+}

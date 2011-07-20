@@ -1,56 +1,69 @@
 /*
  * File: dicache.c
  *
- * Copyright 2000 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright 2000-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
-#include <glib.h>           /* GHashTable functions */
-#include <gtk/gtk.h>
-#include <sys/time.h>       /* for libc5 compatibility */
 #include <string.h>         /* for memset */
-#include <stdio.h>
 #include <stdlib.h>
 
-#include "image.h"
-#include "web.h"
+#include "msg.h"
+#include "image.hh"
+#include "imgbuf.hh"
+#include "web.hh"
 #include "dicache.h"
-#include "cache.h"
-#include "interface.h"
-#include "prefs.h"
+#include "dpng.h"
+#include "dgif.h"
+#include "djpeg.h"
 
-typedef struct _DICacheHashEntry DICacheHashEntry;
+typedef struct _DICacheNode DICacheNode;
 
-struct _DICacheHashEntry {
-   gint valid;
-   DilloUrl *url;       /* "Key" of this hash entry */
-   DICacheEntry* next;  /* pointer to the first dicache entry in this list */
+enum {
+   DIC_Gif,
+   DIC_Png,
+   DIC_Jpeg
 };
 
-static GHashTable *dicache_hash;
-
-static gint dicache_size_total; /* invariant: dicache_size_total is
-                                 * the sum of the image sizes of all
-                                 * cache lines in dicache. */
+struct _DICacheNode {
+   int valid;            /* flag */
+   DilloUrl *url;        /* primary "Key" for this dicache entry */
+   DICacheEntry *first;  /* pointer to the first dicache entry in this list */
+};
 
 /*
- * Determine if two hash entries are equal (used by GHashTable)
+ * List of DICacheNode. One node per URL. Each node may have several
+ * versions of the same image in a linked list.
  */
-static gint Dicache_hash_entry_equal(gconstpointer v1, gconstpointer v2)
+static Dlist *CachedIMGs = NULL;
+
+static uint_t dicache_size_total; /* invariant: dicache_size_total is
+                                   * the sum of the image sizes (3*w*h)
+                                   * of all the images in the dicache. */
+
+/*
+ * Compare two dicache nodes
+ */
+static int Dicache_node_cmp(const void *v1, const void *v2)
 {
-   return (!a_Url_cmp((DilloUrl *)v1, (DilloUrl *)v2));
+   const DICacheNode *n1 = v1, *n2 = v2;
+
+   return a_Url_cmp(n1->url, n2->url);
 }
 
 /*
- * Determine the hash value given the key (used by GHashTable)
+ * Compare function for searching a node by Url
  */
-static guint Dicache_url_hash(gconstpointer key)
+static int Dicache_node_by_url_cmp(const void *v1, const void *v2)
 {
-   return g_str_hash(URL_STR(((DilloUrl *)key)));
+   const DICacheNode *node = v1;
+   const DilloUrl *url = v2;
+
+   return a_Url_cmp(node->url, url);
 }
 
 /*
@@ -58,7 +71,7 @@ static guint Dicache_url_hash(gconstpointer key)
  */
 void a_Dicache_init(void)
 {
-   dicache_hash = g_hash_table_new(Dicache_url_hash, Dicache_hash_entry_equal);
+   CachedIMGs = dList_new(256);
    dicache_size_total = 0;
 }
 
@@ -67,203 +80,178 @@ void a_Dicache_init(void)
  */
 static DICacheEntry *Dicache_entry_new(void)
 {
-   DICacheEntry *entry = g_new(DICacheEntry, 1);
+   DICacheEntry *entry = dNew(DICacheEntry, 1);
 
    entry->width = 0;
    entry->height = 0;
    entry->type = DILLO_IMG_TYPE_NOTSET;
    entry->cmap = NULL;
-   entry->ImageBuffer = NULL;
+   entry->v_imgbuf = NULL;
    entry->RefCount = 1;
    entry->TotalSize = 0;
-   entry->Y = 0;
+   entry->ScanNumber = 0;
    entry->BitVec = NULL;
    entry->State = DIC_Empty;
-   entry->version = 0;
+   entry->version = 1;
+
+   entry->Decoder = NULL;
+   entry->DecoderData = NULL;
+   entry->DecodedSize = 0;
+
    entry->next = NULL;
 
    return entry;
 }
 
 /*
- * Add a new entry to the hash
+ * Add a new entry in the dicache
+ * (a single node (URL) may have several entries)
  */
-DICacheEntry *a_Dicache_add_entry(const DilloUrl *Url)
+static DICacheEntry *Dicache_add_entry(const DilloUrl *Url)
 {
    DICacheEntry *entry;
-   DICacheHashEntry *hash_entry;
+   DICacheNode *node;
 
    entry = Dicache_entry_new();
 
-   if ( (hash_entry = g_hash_table_lookup(dicache_hash, Url))) {
-      /* this URL is already in the hash, add entry at the END of the list */
-      DICacheEntry *ptr = hash_entry->next;
+   if ((node = dList_find_sorted(CachedIMGs, Url, Dicache_node_by_url_cmp))) {
+      /* this URL is already in CachedIMGs, add entry at the END of the list */
+      DICacheEntry *ptr = node->first;
 
-      hash_entry->valid = 1;
+      node->valid = 1;
       for (  ; ptr->next; ptr = ptr->next);
       ptr->next = entry;
       entry->version = ptr->version+1;
-      entry->url = hash_entry->url;
+      entry->url = node->url;
 
-   } else { /* no hash entry yet, so create one */
-      DICacheHashEntry *hash_entry = g_new(DICacheHashEntry, 1);
+   } else { /* no node yet, so create one */
+      DICacheNode *node = dNew(DICacheNode, 1);
 
-      hash_entry->url = a_Url_dup(Url);
-      entry->url = hash_entry->url;
-      hash_entry->next = entry;
-      hash_entry->valid = 1;
-      g_hash_table_insert(dicache_hash, hash_entry->url, hash_entry);
+      node->url = a_Url_dup(Url);
+      entry->url = node->url;
+      node->first = entry;
+      node->valid = 1;
+      dList_insert_sorted(CachedIMGs, node, Dicache_node_cmp);
    }
 
    return entry;
 }
 
 /*
- * Search an entry in the dicache (given the Url).
- * Return value: a pointer to the entry of the _newest_ (i.e. highest)
- *               version if found; NULL otherwise.
- */
-DICacheEntry *a_Dicache_get_entry(const DilloUrl *Url)
-{
-   DICacheHashEntry *hash_entry = g_hash_table_lookup(dicache_hash, Url);
-   DICacheEntry *entry;
-
-   if (!hash_entry || !hash_entry->valid)
-      return NULL;
-
-   for (entry = hash_entry->next; (entry && entry->next); entry = entry->next);
-
-   return entry;
-}
-
-/*
- * Search a particular version of an URL in the Dicache.
+ * Search a particular version of a URL in the Dicache.
  * Return value: a pointer to the entry if found; NULL otherwise.
+ *
+ * Notes: DIC_Last means last version of the image.
+ *        version zero is not allowed.
  */
-static DICacheEntry *Dicache_get_entry_version(const DilloUrl *Url,
-                                               gint version)
+DICacheEntry *a_Dicache_get_entry(const DilloUrl *Url, int version)
 {
-   DICacheHashEntry *hash_entry = g_hash_table_lookup(dicache_hash, Url);
-   DICacheEntry *entry = hash_entry ? hash_entry->next : NULL;
+   DICacheNode *node;
+   DICacheEntry *entry = NULL;
 
-   while (entry && entry->version != version)
-      entry = entry->next;
+   dReturn_val_if_fail(version != 0, NULL);
 
+   node = dList_find_sorted(CachedIMGs, Url, Dicache_node_by_url_cmp);
+   if (node) {
+      if (version == DIC_Last) {
+         if (node->valid) {
+            entry = node->first;
+            for ( ;  (entry && entry->next); entry = entry->next);
+         }
+      } else {
+         entry = node->first;
+         for ( ; entry && entry->version != version; entry = entry->next) ;
+      }
+   }
    return entry;
 }
 
 /*
  * Actually free a dicache entry, given the URL and the version number.
  */
-static void Dicache_remove(const DilloUrl *Url, gint version)
+static void Dicache_remove(const DilloUrl *Url, int version)
 {
-   DICacheHashEntry *hash_entry = g_hash_table_lookup(dicache_hash, Url);
-   DICacheEntry *entry = hash_entry ? hash_entry->next : NULL, *prev = entry;
+   DICacheNode *node;
+   DICacheEntry *entry, *prev;
+   _MSG("Dicache_remove url=%s\n", URL_STR(Url));
+   node = dList_find_sorted(CachedIMGs, Url, Dicache_node_by_url_cmp);
+   prev = entry = (node) ? node->first : NULL;
 
    while (entry && (entry->version != version) ) {
       prev = entry;
       entry = entry->next;
    }
 
-   if ( entry ) {
+   if (entry) {
+      _MSG("Dicache_remove Decoder=%p DecoderData=%p\n",
+          entry->Decoder, entry->DecoderData);
       /* Eliminate this dicache entry */
-      g_free(entry->cmap);
-      if (entry->ImageBuffer) {
-         free(entry->ImageBuffer);
-         dicache_size_total -= entry->TotalSize;
-      }
+      dFree(entry->cmap);
       a_Bitvec_free(entry->BitVec);
+      a_Imgbuf_unref(entry->v_imgbuf);
+      if (entry->Decoder) {
+         entry->Decoder(CA_Abort, entry->DecoderData);
+      }
+      dicache_size_total -= entry->TotalSize;
 
-      if (hash_entry->next == entry) {
+      if (node->first == entry) {
          if (!entry->next) {
-            /* last entry with this URL. Remove the hash entry as well */
-            g_hash_table_remove(dicache_hash, hash_entry->url);
-            a_Url_free(hash_entry->url);
-            g_free(hash_entry);
+            /* last entry with this URL. Remove the node as well */
+            dList_remove(CachedIMGs, node);
+            a_Url_free(node->url);
+            dFree(node);
          } else
-            hash_entry->next = entry->next;
-      } else
+            node->first = entry->next;
+      } else {
          prev->next = entry->next;
-      g_free(entry);
+      }
+      dFree(entry);
    }
 }
 
 /*
  * Unrefs the counter of a dicache entry, and _if_ no DwImage is acessing
- * this buffer _and_ there is a higher version of this image, then we call
- * Dicache_free to do the dirty job.
+ * this buffer, then we call Dicache_remove() to do the job.
  */
-void a_Dicache_unref(const DilloUrl *Url, gint version)
+void a_Dicache_unref(const DilloUrl *Url, int version)
 {
    DICacheEntry *entry;
 
-   if ( (entry = Dicache_get_entry_version(Url, version)) )
-      if (--entry->RefCount == 0 && (entry->next || !prefs.use_dicache) )
+   _MSG("a_Dicache_unref\n");
+   if ((entry = a_Dicache_get_entry(Url, version))) {
+      if (--entry->RefCount == 0) {
          Dicache_remove(Url, version);
+      }
+   }
 }
 
 /*
  * Refs the counter of a dicache entry.
  */
-
-DICacheEntry* a_Dicache_ref(const DilloUrl *Url, gint version)
+DICacheEntry* a_Dicache_ref(const DilloUrl *Url, int version)
 {
    DICacheEntry *entry;
 
-   if ( (entry = Dicache_get_entry_version(Url, version)) )
+   if ((entry = a_Dicache_get_entry(Url, version))) {
       ++entry->RefCount;
-
+   }
    return entry;
 }
 
 /*
  * Invalidate this entry. This is used for the reloading mechanism.
- * Can't erase current versions, but a_Dicache_get_entry must return NULL.
+ * Can't erase current versions, but a_Dicache_get_entry(url, DIC_Last)
+ * must return NULL.
  */
 void a_Dicache_invalidate_entry(const DilloUrl *Url)
 {
-   DICacheHashEntry *hash_entry = g_hash_table_lookup(dicache_hash, Url);
+   DICacheNode *node;
 
-   if (hash_entry) hash_entry->valid = 0;
+   node = dList_find_sorted(CachedIMGs, Url, Dicache_node_by_url_cmp);
+   if (node)
+      node->valid = 0;
 }
 
-
-/* ------------------------------------------------------------------------- */
-
-/*
- * This function is a cache client; (but feeds its clients from dicache)
- */
-void a_Dicache_callback(int Op, CacheClient_t *Client)
-{
-   /* todo: Handle Op = CA_Abort (to show what was got)  --Jcid */
-   guint i;
-   DilloWeb *Web = Client->Web;
-   DilloImage *Image = Web->Image;
-   DICacheEntry *DicEntry = a_Dicache_get_entry(Web->url);
-
-   g_return_if_fail ( DicEntry != NULL );
-
-   if ( Op == CA_Send ) {
-      if ( Image->height == 0 && DicEntry->State >= DIC_SetParms ) {
-         /* Set parms */
-         a_Image_set_parms(
-            Image, DicEntry->ImageBuffer, DicEntry->url,
-            DicEntry->version, DicEntry->width, DicEntry->height,
-            DicEntry->type);
-      }
-      if (DicEntry->State == DIC_Write) {
-         for (i = 0; i < DicEntry->height; ++i)
-            if (a_Bitvec_get_bit(DicEntry->BitVec, (gint)i) &&
-                !a_Bitvec_get_bit(Image->BitVec, (gint)i) )
-               a_Image_write(
-                  Image, DicEntry->ImageBuffer + i*DicEntry->width*3, i,FALSE);
-
-      }
-   } else if ( Op == CA_Close || Op == CA_Abort ) {
-      a_Image_close(Web->Image);
-      a_Interface_close_client(Web->bw, Client->Key);
-   }
-}
 
 /* ------------------------------------------------------------------------- */
 
@@ -271,60 +259,77 @@ void a_Dicache_callback(int Op, CacheClient_t *Client)
  * Set image's width, height & type
  * (By now, we'll use the image information despite the html tags --Jcid)
  */
-void a_Dicache_set_parms(DilloUrl *url, gint version, DilloImage *Image,
-                         guint width, guint height, DilloImgType type)
+void a_Dicache_set_parms(DilloUrl *url, int version, DilloImage *Image,
+                         uint_t width, uint_t height, DilloImgType type)
 {
    DICacheEntry *DicEntry;
-   size_t Size = width * height * 3;
 
-   g_return_if_fail ( Image != NULL && width && height );
+   _MSG("a_Dicache_set_parms (%s)\n", URL_STR(url));
+   dReturn_if_fail ( Image != NULL && width && height );
    /* Find the DicEntry for this Image */
-   DicEntry = Dicache_get_entry_version(url, version);
-   g_return_if_fail ( DicEntry != NULL );
+   DicEntry = a_Dicache_get_entry(url, version);
+   dReturn_if_fail ( DicEntry != NULL );
+   /* Parameters already set? */
+   dReturn_if_fail ( DicEntry->State < DIC_SetParms );
 
-   /* Initialize the DicEntry */
-   /* using malloc() instead of g_new() avoids crashes on oversized images */
-   DicEntry->ImageBuffer = malloc(sizeof(guchar) * Size);
-   g_return_if_fail ( DicEntry->ImageBuffer != NULL );
-   DicEntry->TotalSize = Size;
+   _MSG("  RefCount=%d version=%d\n", DicEntry->RefCount, DicEntry->version);
+
+   /* BUG: there's just one image-type now */
+   #define I_RGB 0
+   DicEntry->v_imgbuf = a_Imgbuf_new(Image->dw, I_RGB, width, height);
+
+   DicEntry->TotalSize = width * height * 3;
    DicEntry->width = width;
    DicEntry->height = height;
    DicEntry->type = type;
-   DicEntry->BitVec = a_Bitvec_new((gint)height);
+   DicEntry->BitVec = a_Bitvec_new((int)height);
    DicEntry->State = DIC_SetParms;
 
-   dicache_size_total += Size;
-
-   /* For giggles, make the background of the undrawn parts interesting */
-   memset(DicEntry->ImageBuffer, 0xdd, DicEntry->TotalSize);
-
-   /* Allocate and initialize this image */
-   a_Image_set_parms(Image, DicEntry->ImageBuffer, url, version,
-                     width, height, type);
+   dicache_size_total += DicEntry->TotalSize;
 }
 
 /*
  * Implement the set_cmap method for the Image
  */
-void a_Dicache_set_cmap(DilloUrl *url, gint version, DilloImage *Image,
-                        const guchar *cmap, guint num_colors,
-                        gint num_colors_max, gint bg_index)
+void a_Dicache_set_cmap(DilloUrl *url, int version, DilloImage *Image,
+                        const uchar_t *cmap, uint_t num_colors,
+                        int num_colors_max, int bg_index)
 {
-   DICacheEntry *DicEntry = Dicache_get_entry_version(url, version);
+   DICacheEntry *DicEntry = a_Dicache_get_entry(url, version);
 
-   g_return_if_fail ( DicEntry != NULL );
+   _MSG("a_Dicache_set_cmap\n");
+   dReturn_if_fail ( DicEntry != NULL );
 
-   g_free(DicEntry->cmap);
-   DicEntry->cmap = g_new0(guchar, 3 * num_colors_max);
+   dFree(DicEntry->cmap);
+   DicEntry->cmap = dNew0(uchar_t, 3 * num_colors_max);
    memcpy(DicEntry->cmap, cmap, 3 * num_colors);
-   if (bg_index >= 0 && (guint)bg_index < num_colors) {
+   if (bg_index >= 0 && (uint_t)bg_index < num_colors) {
       DicEntry->cmap[bg_index * 3]     = (Image->bg_color >> 16) & 0xff;
       DicEntry->cmap[bg_index * 3 + 1] = (Image->bg_color >> 8) & 0xff;
       DicEntry->cmap[bg_index * 3 + 2] = (Image->bg_color) & 0xff;
    }
 
-   a_Image_set_cmap(Image, DicEntry->cmap);
    DicEntry->State = DIC_SetCmap;
+}
+
+/*
+ * Reset for a new scan from a multiple-scan image.
+ */
+void a_Dicache_new_scan(const DilloUrl *url, int version)
+{
+   DICacheEntry *DicEntry;
+
+   _MSG("a_Dicache_new_scan\n");
+   dReturn_if_fail ( url != NULL );
+   DicEntry = a_Dicache_get_entry(url, version);
+   dReturn_if_fail ( DicEntry != NULL );
+   if (DicEntry->State < DIC_SetParms) {
+      MSG("a_Dicache_new_scan before DIC_SetParms\n");
+      exit(1);
+   }
+   a_Bitvec_clear(DicEntry->BitVec);
+   DicEntry->ScanNumber++;
+   a_Imgbuf_new_scan(DicEntry->v_imgbuf);
 }
 
 /*
@@ -332,63 +337,223 @@ void a_Dicache_set_cmap(DilloUrl *url, gint version, DilloImage *Image,
  * (Write a scan line into the Dicache entry)
  * buf: row buffer
  * Y  : row number
- * x  : horizontal offset? (always zero)
  */
-void a_Dicache_write(DilloImage *Image, DilloUrl *url, gint version,
-                     const guchar *buf, gint x, guint Y)
+void a_Dicache_write(DilloUrl *url, int version, const uchar_t *buf, uint_t Y)
 {
    DICacheEntry *DicEntry;
 
-   g_return_if_fail ( Image != NULL );
-   DicEntry = Dicache_get_entry_version(url, version);
-   g_return_if_fail ( DicEntry != NULL );
-   g_return_if_fail ( DicEntry->width > 0 && DicEntry->height > 0 );
+   _MSG("a_Dicache_write\n");
+   DicEntry = a_Dicache_get_entry(url, version);
+   dReturn_if_fail ( DicEntry != NULL );
+   dReturn_if_fail ( DicEntry->width > 0 && DicEntry->height > 0 );
 
-   a_Image_write(Image, buf, Y, TRUE);
-   DicEntry->Y = Y;
-   a_Bitvec_set_bit(DicEntry->BitVec, (gint)Y);
+   /* update the common buffer in the imgbuf */
+   a_Imgbuf_update(DicEntry->v_imgbuf, buf, DicEntry->type,
+                   DicEntry->cmap, DicEntry->width, DicEntry->height, Y);
+
+   a_Bitvec_set_bit(DicEntry->BitVec, (int)Y);
    DicEntry->State = DIC_Write;
 }
 
 /*
  * Implement the close method of the decoding process
  */
-void a_Dicache_close(DilloUrl *url, gint version, CacheClient_t *Client)
+void a_Dicache_close(DilloUrl *url, int version, CacheClient_t *Client)
 {
    DilloWeb *Web = Client->Web;
-   DICacheEntry *DicEntry = Dicache_get_entry_version(url, version);
+   DICacheEntry *DicEntry = a_Dicache_get_entry(url, version);
 
-   g_return_if_fail ( DicEntry != NULL );
+   dReturn_if_fail ( DicEntry != NULL );
 
-   DicEntry->State = DIC_Close;
-   if (DicEntry->cmap) {
-      g_free(DicEntry->cmap);
+   /* a_Dicache_unref() may free DicEntry */
+   _MSG("a_Dicache_close RefCount=%d\n", DicEntry->RefCount - 1);
+
+   if (DicEntry->State < DIC_Close) {
+      DicEntry->State = DIC_Close;
+      dFree(DicEntry->cmap);
       DicEntry->cmap = NULL;
+      DicEntry->Decoder = NULL;
+      DicEntry->DecoderData = NULL;
    }
-   a_Image_close(Web->Image);
-   a_Interface_close_client(Web->bw, Client->Key);
+   a_Dicache_unref(url, version);
+
+   a_Bw_close_client(Web->bw, Client->Key);
 }
 
 /* ------------------------------------------------------------------------- */
 
-static gboolean
- Dicache_remove_hash_entry(gpointer key, gpointer value, gpointer user_data)
+/*
+ * Generic MIME handler for GIF, JPEG and PNG.
+ * Sets a_Dicache_callback as the cache-client,
+ * and also sets the image decoder.
+ *
+ * Parameters:
+ *   Type: MIME type
+ *   Ptr:  points to a Web structure
+ *   Call: Dillo calls this with more data/eod
+ *   Data: Decoding data structure
+ */
+static void *Dicache_image(int ImgType, const char *MimeType, void *Ptr,
+                           CA_Callback_t *Call, void **Data)
 {
-   DICacheHashEntry *hash_entry = (DICacheHashEntry *)value;
-   DICacheEntry *entry = hash_entry->next;
+   DilloWeb *web = Ptr;
+   DICacheEntry *DicEntry;
 
-   /* Eliminate this (last) dicache entry */
-   g_free(entry->cmap);
-   if (entry->ImageBuffer) {
-      free(entry->ImageBuffer);
-      dicache_size_total -= entry->TotalSize;
+   dReturn_val_if_fail(MimeType && Ptr, NULL);
+
+   if (!web->Image) {
+      web->Image = a_Image_new(NULL, web->bgColor);
+      a_Image_ref(web->Image);
    }
-   a_Bitvec_free(entry->BitVec);
-   a_Url_free(hash_entry->url);
-   g_free(hash_entry);
 
-   return TRUE;
+   DicEntry = a_Dicache_get_entry(web->url, DIC_Last);
+   if (!DicEntry) {
+      /* Let's create an entry for this image... */
+      DicEntry = Dicache_add_entry(web->url);
+      DicEntry->DecoderData =
+         (ImgType == DIC_Png) ?
+            a_Png_new(web->Image, DicEntry->url, DicEntry->version) :
+         (ImgType == DIC_Gif) ?
+            a_Gif_new(web->Image, DicEntry->url, DicEntry->version) :
+         (ImgType == DIC_Jpeg) ?
+            a_Jpeg_new(web->Image, DicEntry->url, DicEntry->version) :
+            NULL;
+   } else {
+      /* Repeated image */
+      a_Dicache_ref(DicEntry->url, DicEntry->version);
+   }
+   DicEntry->Decoder = (ImgType == DIC_Png)  ? (CA_Callback_t)a_Png_callback :
+                       (ImgType == DIC_Gif)  ? (CA_Callback_t)a_Gif_callback :
+                       (ImgType == DIC_Jpeg) ? (CA_Callback_t)a_Jpeg_callback:
+                                               NULL;
+   *Data = DicEntry->DecoderData;
+   *Call = (CA_Callback_t) a_Dicache_callback;
+
+   return (web->Image->dw);
 }
+
+/*
+ * PNG wrapper for Dicache_image()
+ */
+void *a_Dicache_png_image(const char *Type, void *Ptr, CA_Callback_t *Call,
+                          void **Data)
+{
+   return Dicache_image(DIC_Png, Type, Ptr, Call, Data);
+}
+
+/*
+ * GIF wrapper for Dicache_image()
+ */
+void *a_Dicache_gif_image(const char *Type, void *Ptr, CA_Callback_t *Call,
+                          void **Data)
+{
+   return Dicache_image(DIC_Gif, Type, Ptr, Call, Data);
+}
+
+/*
+ * JPEG wrapper for Dicache_image()
+ */
+void *a_Dicache_jpeg_image(const char *Type, void *Ptr, CA_Callback_t *Call,
+                           void **Data)
+{
+   return Dicache_image(DIC_Jpeg, Type, Ptr, Call, Data);
+}
+
+/*
+ * This function is a cache client; (but feeds its clients from dicache)
+ */
+void a_Dicache_callback(int Op, CacheClient_t *Client)
+{
+   uint_t i;
+   DilloWeb *Web = Client->Web;
+   DilloImage *Image = Web->Image;
+   DICacheEntry *DicEntry = a_Dicache_get_entry(Web->url, DIC_Last);
+
+   dReturn_if_fail ( DicEntry != NULL );
+
+   /* Copy the version number in the Client */
+   if (Client->Version == 0)
+      Client->Version = DicEntry->version;
+
+   /* Only call the decoder when necessary */
+   if (Op == CA_Send && DicEntry->State < DIC_Close &&
+       DicEntry->DecodedSize < Client->BufSize) {
+      DicEntry->Decoder(Op, Client);
+      DicEntry->DecodedSize = Client->BufSize;
+   } else if (Op == CA_Close || Op == CA_Abort) {
+      if (DicEntry->State < DIC_Close) {
+         DicEntry->Decoder(Op, Client);
+      } else {
+         a_Dicache_close(DicEntry->url, DicEntry->version, Client);
+      }
+   }
+
+   /* when the data stream is not an image 'v_imgbuf' remains NULL */
+   if (Op == CA_Send && DicEntry->v_imgbuf) {
+      if (Image->height == 0 && DicEntry->State >= DIC_SetParms) {
+         /* Set parms */
+         a_Image_set_parms(
+            Image, DicEntry->v_imgbuf, DicEntry->url,
+            DicEntry->version, DicEntry->width, DicEntry->height,
+            DicEntry->type);
+      }
+      if (DicEntry->State == DIC_Write) {
+         if (DicEntry->ScanNumber == Image->ScanNumber) {
+            for (i = 0; i < DicEntry->height; ++i)
+               if (a_Bitvec_get_bit(DicEntry->BitVec, (int)i) &&
+                   !a_Bitvec_get_bit(Image->BitVec, (int)i) )
+                  a_Image_write(Image, i);
+         } else {
+            for (i = 0; i < DicEntry->height; ++i) {
+               if (a_Bitvec_get_bit(DicEntry->BitVec, (int)i) ||
+                   !a_Bitvec_get_bit(Image->BitVec, (int)i)   ||
+                   DicEntry->ScanNumber > Image->ScanNumber + 1) {
+                  a_Image_write(Image, i);
+               }
+               if (!a_Bitvec_get_bit(DicEntry->BitVec, (int)i))
+                  a_Bitvec_clear_bit(Image->BitVec, (int)i);
+            }
+            Image->ScanNumber = DicEntry->ScanNumber;
+         }
+      }
+   } else if (Op == CA_Close || Op == CA_Abort) {
+      a_Image_close(Image);
+      a_Bw_close_client(Web->bw, Client->Key);
+   }
+}
+
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Free the imgbuf (RGB data) of unused entries.
+ */
+void a_Dicache_cleanup(void)
+{
+   int i;
+   DICacheNode *node;
+   DICacheEntry *entry;
+
+   _MSG("a_Dicache_cleanup\n");
+   for (i = 0; i < dList_length(CachedIMGs); ++i) {
+      node = dList_nth_data(CachedIMGs, i);
+      /* iterate each entry of this node */
+      for (entry = node->first; entry; entry = entry->next) {
+         if (entry->v_imgbuf &&
+             a_Imgbuf_last_reference(entry->v_imgbuf)) {
+            /* free this unused entry */
+            if (entry->next) {
+               Dicache_remove(node->url, entry->version);
+            } else {
+               Dicache_remove(node->url, entry->version);
+               --i;
+               break;
+            }
+         }
+      }
+   }
+}
+
+/* ------------------------------------------------------------------------- */
 
 /*
  * Deallocate memory used by dicache module
@@ -396,9 +561,21 @@ static gboolean
  */
 void a_Dicache_freeall(void)
 {
-   /* Remove every dicache entry */
-   g_hash_table_foreach_remove(dicache_hash,
-                               (GHRFunc)Dicache_remove_hash_entry, NULL);
-   /* Remove the dicache hash */
-   g_hash_table_destroy(dicache_hash);
+   DICacheNode *node;
+   DICacheEntry *entry;
+
+   /* Remove every dicache node and its entries */
+   while ((node = dList_nth_data(CachedIMGs, 0))) {
+      while ((entry = node->first)) {
+         node->first = entry->next;
+         dFree(entry->cmap);
+         a_Bitvec_free(entry->BitVec);
+         a_Imgbuf_unref(entry->v_imgbuf);
+         dicache_size_total -= entry->TotalSize;
+      }
+      dList_remove_fast(CachedIMGs, node);
+      a_Url_free(node->url);
+      dFree(node);
+   }
+   dList_free(CachedIMGs);
 }

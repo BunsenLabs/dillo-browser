@@ -1,38 +1,23 @@
 /*
  * File: bookmark.c
  *
- * Copyright 2002 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright 2002-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
-#include <errno.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "msg.h"
-#include "browser.h"
 #include "history.h"
-#include "menu.h"
 #include "capi.h"
-#include "nav.h"
-#include "misc.h"
 #include "bookmark.h"  /* for prototypes */
 #include "../dpip/dpip.h"
 
 
-
-/*
- * Initialize the bookmarks module
- */
-void a_Bookmarks_init(void)
-{
-   /* simple isn't it? ;) */
-}
 
 /*
  * Have a short chat with the bookmarks server,
@@ -56,7 +41,7 @@ void a_Bookmarks_chat_add(BrowserWindow *Bw, char *Cmd, char *answer)
    if (Bw)
       bw = Bw;
    if (!cmd4 && Cmd)
-      cmd4 = g_strdup(Cmd);
+      cmd4 = dStrdup(Cmd);
 
    if (!answer) {
       a_Capi_dpi_send_cmd(NULL, bw, cmd1, "bookmarks", 1);
@@ -73,7 +58,7 @@ void a_Bookmarks_chat_add(BrowserWindow *Bw, char *Cmd, char *answer)
          } else if (*answer == 'O') {
             /* "OK, send it!" */
             a_Capi_dpi_send_cmd(NULL, bw, cmd4, "bookmarks", 0);
-            g_free(cmd4);
+            dFree(cmd4);
             cmd4 = NULL;
          }
       }
@@ -83,15 +68,12 @@ void a_Bookmarks_chat_add(BrowserWindow *Bw, char *Cmd, char *answer)
 /*
  * Add the new bookmark through the bookmarks server
  */
-void a_Bookmarks_add(GtkWidget *widget, gpointer client_data)
+void a_Bookmarks_add(BrowserWindow *bw, const DilloUrl *url)
 {
-   BrowserWindow *bw = (BrowserWindow *)client_data;
-   DilloUrl *url;
-   const gchar *title;
-   gchar *cmd;
+   const char *title;
+   char *cmd;
 
-   url = a_Menu_popup_get_url(bw);
-   g_return_if_fail(url != NULL);
+   dReturn_if_fail(url != NULL);
 
    /* if the page has no title, we'll use the url string */
    title = a_History_get_title_by_url(url, 1);
@@ -99,18 +81,6 @@ void a_Bookmarks_add(GtkWidget *widget, gpointer client_data)
    cmd = a_Dpip_build_cmd("cmd=%s url=%s title=%s",
                           "add_bookmark", URL_STR(url), title);
    a_Bookmarks_chat_add(bw, cmd, NULL);
-   g_free(cmd);
-}
-
-/*
- * Request the server to show the bookmarks
- */
-void a_Bookmarks_show(BrowserWindow *bw)
-{
-   DilloUrl *url;
-
-   url = a_Url_new("dpi:/bm/", NULL, 0, 0, 0);
-   a_Nav_push(bw, url);
-   a_Url_free(url);
+   dFree(cmd);
 }
 

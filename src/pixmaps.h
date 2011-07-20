@@ -6,7 +6,7 @@
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
@@ -14,7 +14,7 @@
 #define __PIXMAPS_H__
 
 /* XPM
-static char * history_xpm[] = {
+static const char *const history_xpm[] = {
 "11 20 6 1",
 "       c None",
 ".      c #000000000000",
@@ -44,7 +44,7 @@ static char * history_xpm[] = {
 "           "};
 */
 /* XPM */
-static char * left_xpm[] = {
+static const char *const left_xpm[] = {
 "22 22 46 1",
 "       c None",
 ".      c #000000",
@@ -115,7 +115,7 @@ static char * left_xpm[] = {
 "                   .  ",
 "                      "};
 /* XPM */
-static char * right_xpm[] = {
+static const char *const right_xpm[] = {
 "22 22 46 1",
 "       c None",
 ".      c #000000",
@@ -186,7 +186,7 @@ static char * right_xpm[] = {
 "                   .  ",
 "                      "};
 /* XPM */
-static char * reload_xpm[] = {
+static const char *const reload_xpm[] = {
 "22 22 147 2",
 "       c None",
 ".      c #000000",
@@ -358,7 +358,7 @@ static char * reload_xpm[] = {
 "      . k.l.m.j j n.[.o.h.p.3 3 3 3 3 3 { . ",
 "          . . . . . . . . . . . . . . . . . "};
 /* XPM */
-static char * home_xpm[] = {
+static const char *const home_xpm[] = {
 "22 22 106 2",
 "       c None",
 ".      c #190E0B",
@@ -489,7 +489,7 @@ static char * home_xpm[] = {
 "        # # # # # # # # # # # # # #         ",
 "                                            "};
 /* XPM */
-static char * save_xpm[] = {
+static const char *const save_xpm[] = {
 "22 22 59 1",
 "       c None",
 ".      c #000000",
@@ -574,7 +574,7 @@ static char * save_xpm[] = {
 "                      "};
 
 /* XPM */
-static char * stop_xpm[] = {
+static const char *const stop_xpm[] = {
 "22 22 77 1",
 "       c None",
 ".      c #000000",
@@ -675,8 +675,9 @@ static char * stop_xpm[] = {
 "     .KLLLLLLLK.      ",
 "      .........       ",
 "                      "};
+
 /* XPM */
-static char * bm_xpm[] = {
+static const char *const bm_xpm[] = {
 "22 22 86 1",
 "       c None",
 ".      c #000000",
@@ -787,10 +788,61 @@ static char * bm_xpm[] = {
 "         .S. TU.      ",
 "          .   .       "};
 
+/* XPM */
+static const char *const tools_xpm[] = {
+"22 22 25 1",
+"       c #None",
+".      c #696977777676",
+"X      c #96969B9B9B9B",
+"o      c #848490908F8F",
+"O      c #D7D7D7D7D7D7",
+"+      c #B5B5B7B7B7B7",
+"@      c #EAEAEAEAEAEA",
+"#      c #797987878787",
+"$      c #F1F1EFEFEFEF",
+"%      c #CCCCCCCCCCCC",
+"&      c #8B8B97979696",
+"*      c #CACACACACACA",
+"=      c #787878787878",
+"-      c #AAAAB5B5B5B5",
+";      c #F9F9F8F8F9F9",
+":      c #A6A6A8A8A8A8",
+">      c #7F7F90907F7F",
+",      c #A4A4BDBDA4A4",
+"<      c #A5A58A8A5353",
+"1      c #00008B8B0000",
+"2      c #6C6C6C6C6C6C",
+"3      c #BCBCC3C3C2C2",
+"4      c #CACAD8D8D8D8",
+"5      c #9999A8A8A8A8",
+"6      c #848489898989",
+"                      ",
+"                      ",
+"        .XXo.         ",
+"        oO $$+.       ",
+"        oo@$$$@#      ",
+"         #o@$$$O#     ",
+"          #X$$$$%X    ",
+"  &#%      #X$$$@o    ",
+"  #*o      =-@$$$#    ",
+"  oO*o    #$@$$$$#    ",
+"  oOOOX  oO@;$$$$X    ",
+"  #@O*OXo:>,<$$$$o    ",
+"  XO@O*O*12>,<$$$#    ",
+"   X$@O*+<12>,<$$&    ",
+"    +$@O*+<12>,<;@    ",
+"     :$@O*+<12>,<$@   ",
+"      &34O*-<11>,<$$  ",
+"        -X&X&<12>,<$O ",
+"            45<11>,<3 ",
+"             45<1=>O# ",
+"              -&X6&=# ",
+"                      "};
+
 /* Small icons here */
 
 /* XPM */
-static char * s_left_xpm[] = {
+static const char *const left_s_xpm[] = {
 "16 16 33 1",
 "       c None",
 ".      c #000000",
@@ -842,7 +894,7 @@ static char * s_left_xpm[] = {
 "      ..    .;. ",
 "             .  "};
 /* XPM */
-static char * s_right_xpm[] = {
+static const char *const right_s_xpm[] = {
 "16 16 56 1",
 "       c None",
 ".      c #000000",
@@ -917,7 +969,7 @@ static char * s_right_xpm[] = {
 "        ..  .>. ",
 "             .  "};
 /* XPM */
-static char * s_home_xpm[] = {
+static const char *const home_s_xpm[] = {
 "16 16 54 1",
 "       c None",
 ".      c #170E0B",
@@ -990,7 +1042,7 @@ static char * s_home_xpm[] = {
 "  +lm+n+mmmml+  ",
 "  ++++o+++++++  "};
 /* XPM */
-static char * s_reload_xpm[] = {
+static const char *const reload_s_xpm[] = {
 "16 16 74 1",
 "       c None",
 ".      c #000000",
@@ -1083,7 +1135,7 @@ static char * s_reload_xpm[] = {
 "   .GHI%%IHG.   ",
 "     ......     "};
 /* XPM */
-static char * s_save_xpm[] = {
+static const char *const save_s_xpm[] = {
 "16 16 51 1",
 "       c None",
 ".      c #000000",
@@ -1153,7 +1205,7 @@ static char * s_save_xpm[] = {
 ".h.iiijkkkkkl.. ",
 " .............  "};
 /* XPM */
-static char * s_stop_xpm[] = {
+static const char *const stop_s_xpm[] = {
 "16 16 65 1",
 "       c None",
 ".      c #000000",
@@ -1238,7 +1290,7 @@ static char * s_stop_xpm[] = {
 "    ........    "};
 
 /* XPM */
-static char * s_bm_xpm[] = {
+static const char *const bm_s_xpm[] = {
 "16 16 63 1",
 "       c None",
 ".      c #000000",
@@ -1321,7 +1373,74 @@ static char * s_bm_xpm[] = {
 "      .v. wx.   "};
 
 /* XPM */
-static char * s_new_xpm[] = {
+static const char *const tools_s_xpm[] = {
+"16 16 45 1",
+"  c #7B127D1C7D08",
+". c #82778EED8E15",
+"X c #8F3F975396FF",
+"o c #9A98A40CA38F",
+"O c #833D8EC28E02",
+"+ c #99C89EDF9EC2",
+"@ c #B347BD91BD42",
+"# c #7E4181A081AF",
+"$ c #8744915990DA",
+"% c #86728A968A7C",
+"& c #8D56924B9226",
+"* c #96DF9AC79AA6",
+"= c #9E01A473A438",
+"- c #AB41B55EB546",
+"; c #ABD1B155B117",
+": c #B5BFBC3DBC2F",
+"> c #B917BCECBCAB",
+", c #B558B98BB958",
+"< c #CEA2CFDBCFD4",
+"1 c #A699AC55ABF1",
+"2 c #C2A5C5A8C57A",
+"3 c #C8B2CA27CA1C",
+"4 c #D80FD952D955",
+"5 c #DF19E120E134",
+"6 c #EAC7E9ECE9FE",
+"7 c #F164EF95EF9D",
+"8 c #F6E0F5E6F61C",
+"9 c #F013EEAEEEBF",
+"0 c #487651675130",
+"q c #6E4D7BA97B06",
+"w c #88F190679051",
+"e c #92339C0E9BC1",
+"r c #A1BBAB0FAA98",
+"t c #A24AA7C4A7A7",
+"y c #86C7935E92DC",
+"u c #C8C4D721D725",
+"i c #D0E6D516D518",
+"p c #76A38450834A",
+"a c #6B4B7B507A6D",
+"s c #7C6D882B878D",
+"d c #88F395099487",
+"f c #DB34DCE9DCF5",
+"g c #5B05673F66CD",
+"h c #9402A0549FCC",
+"  c None",
+/* pixels */
+"                ",
+"     gO+Oq      ",
+"     p*45<Xg    ",
+"     h.>885oa   ",
+"      p.3883Xg  ",
+" i$O   s$488;s  ",
+" O>1p  e;588;a  ",
+" O331sr;7778:s  ",
+" O343,**3678;a  ",
+" f,643;#%368:s  ",
+"  t<64>= &374f  ",
+"   t244>= &379ih",
+"    d@:;=& &475u",
+"      ssr-* *44r",
+"         u-%#*%0",
+"          feww0g"
+};
+
+/* XPM */
+static const char *const new_s_xpm[] = {
 "11 11 35 1",
 "       c None",
 ".      c #000000",
@@ -1371,7 +1490,7 @@ static char * s_new_xpm[] = {
 "  .     .  "};
 
 /* XPM */
-static char * search_xpm[] = {
+static const char *const search_xpm[] = {
 "14 16 11 1",
 "       c None",
 ".      c #000000",
@@ -1402,7 +1521,43 @@ static char * search_xpm[] = {
 "         11   "};
 
 /* XPM */
-static char * full_screen_on_xpm[] = {
+static const char *const help_xpm[] = {
+"14 16 16 1",
+"       c None",
+"1      c #DBDBDB",
+"2      c #B6B6B6",
+"3      c #929292",
+"4      c #6D6D6D",
+"5      c #F1EFEF",
+"6      c #018B00",
+"7      c #A48A53",
+"8      c #A4BDA4",
+"9      c #000000",
+"A      c #000000",
+"B      c #000000",
+"C      c #000000",
+"D      c #000000",
+"E      c #000000",
+"F      c #000000",
+"    5555555   ",
+"   544433355  ",
+"  54555438455 ",
+"  44555542835 ",
+"  44445548245 ",
+"  4444554274  ",
+"  544554274   ",
+"     55474    ",
+"     5474     ",
+"     544      ",
+"      44      ",
+"              ",
+"     5445     ",
+"     4764     ",
+"     4674     ",
+"     5445     "};
+
+/* XPM */
+static const char *const full_screen_on_xpm[] = {
 "13 15 2 1",
 "       c None",
 ".      c #000000",
@@ -1423,7 +1578,7 @@ static char * full_screen_on_xpm[] = {
 "             "};
 
 /* XPM */
-static char * full_screen_off_xpm[] = {
+static const char *const full_screen_off_xpm[] = {
 "13 15 2 1",
 "       c None",
 ".      c #000000",
@@ -1444,33 +1599,34 @@ static char * full_screen_off_xpm[] = {
 "             "};
 
 /* XPM */
-static char * mini_bug_xpm[] = {
-"15 16 6 1",
+static const char *const mini_bug_xpm[] = {
+"16 16 7 1",
 "       c None",
-".      c black",
-"X      c #c0c0c0",
-"o      c #808080",
-"b      c #303030",
-"#      c white"
-"               ",
-"    .   .      ",
-"     ...       ",
-"   X.....X     ",
-"   o.#...o     ",
-"  o.#...o.o    ",
-"  ..#oXo...    ",
-" .....X.....   ",
-"  ....X....    ",
-" .o...X...o.   ",
-"   ...X...     ",
-"  .X..X..X.    ",
-"     .o.       ",
-"          .bbb.",
-"           .o. ",
-"            .  "};
+".      c #000000000000",
+"r      c #FFFF00000000",
+"X      c #BEFBC30BBEFB",
+"o      c #861782078617",
+"O      c #FFFFFFFFFFFF",
+"+      c #30C230C230C2",
+"                ",
+"     .   .      ",
+"      ...       ",
+"    X.....X     ",
+"    o.O...o     ",
+"   o.O...o.o    ",
+"   .rrrXrrr.    ",
+"  .rrrrXrrrr.   ",
+"   .rrrXrrr.    ",
+"  .o.rrXrr.o.   ",
+"    .rrXrr.     ",
+"   .XrrXrrX.    ",
+"      .o.       ",
+"           .+++.",
+"            .o. ",
+"             .  "};
 
 /* XPM */
-static char * mini_ok_xpm[] = {
+static const char *const mini_ok_xpm[] = {
 "15 15 5 1",
 "@ c #000000",
 "a c #808080",
@@ -1493,5 +1649,160 @@ static char * mini_ok_xpm[] = {
 "           @a@ ",
 "            @  "
 };
+
+/* XPM */
+static const char *const left_i_xpm[] = {
+"22 22 3 1",
+"  c None",
+". c #000000",
+"@ c gray70",
+"                      ",
+"                      ",
+"                      ",
+"                      ",
+"        @@            ",
+"       @@@            ",
+"      @@@@            ",
+"     @@@@@@@@@@ @@@@  ",
+"    @@@@@@@@@@@ @@@@  ",
+"   @@@@@@@@@@@@ @@@@  ",
+"  @@@@@@@@@@@@@ @@@@  ",
+"  @@@@@@@@@@@@@ @@@@  ",
+"   @@@@@@@@@@@@ @@@@  ",
+"    @@@@@@@@@@@ @@@@  ",
+"     @@@@@@@@@@ @@@@  ",
+"      @@@@            ",
+"       @@@            ",
+"        @@            ",
+"                 @@@@@",
+"                  @ @ ",
+"                   @  ",
+"                      "};
+
+/* XPM */
+static const char *const right_i_xpm[] = {
+"22 22 3 1",
+"  c None",
+". c #000000",
+"@ c gray70",
+"                      ",
+"                      ",
+"                      ",
+"                      ",
+"            @@        ",
+"            @@@       ",
+"            @@@@      ",
+"  @@@@ @@@@@@@@@@     ",
+"  @@@@ @@@@@@@@@@@    ",
+"  @@@@ @@@@@@@@@@@@   ",
+"  @@@@ @@@@@@@@@@@@@  ",
+"  @@@@ @@@@@@@@@@@@@  ",
+"  @@@@ @@@@@@@@@@@@   ",
+"  @@@@ @@@@@@@@@@@    ",
+"  @@@@ @@@@@@@@@@     ",
+"            @@@@      ",
+"            @@@       ",
+"            @@        ",
+"                 @@@@@",
+"                  @ @ ",
+"                   @  ",
+"                      "};
+
+/* XPM */
+static const char *const stop_i_xpm[] = {
+/* columns rows colors chars-per-pixel */
+"22 22 2 1",
+"       c None",
+"@      c gray70",
+/* pixels */
+"                      ",
+"                      ",
+"      @@@@@@@@@       ",
+"     @@@@@@@@@@@      ",
+"    @@@@@@@@@@@@@     ",
+"   @@@@@@@@@@@@@@@    ",
+"  @@@@@@@@@@@@@@@@@   ",
+" @@@@@@@@@@@@@@@@@@@  ",
+" @@@@@@  @@@  @@@@@@  ",
+" @@@@@@   @   @@@@@@  ",
+" @@@@@@@     @@@@@@@  ",
+" @@@@@@@@   @@@@@@@@  ",
+" @@@@@@@     @@@@@@@  ",
+" @@@@@@   @   @@@@@@  ",
+" @@@@@@  @@@  @@@@@@  ",
+" @@@@@@@@@@@@@@@@@@@  ",
+"  @@@@@@@@@@@@@@@@@   ",
+"   @@@@@@@@@@@@@@@    ",
+"    @@@@@@@@@@@@@     ",
+"     @@@@@@@@@@@      ",
+"      @@@@@@@@@       ",
+"                      "
+};
+
+/* XPM */
+static const char *const stop_si_xpm[] = {
+"16 16 2 1",
+"       c None",
+"@      c gray70",
+"    @@@@@@@@    ",
+"   @@@@@@@@@@   ",
+"  @@@@@@@@@@@@  ",
+" @@@@@@@@@@@@@@ ",
+"@@@@@@@@@@@@@@@@",
+"@@@@@ @@@@ @@@@@",
+"@@@@@@ @@ @@@@@@",
+"@@@@@@@  @@@@@@@",
+"@@@@@@@  @@@@@@@",
+"@@@@@@ @@ @@@@@@",
+"@@@@@ @@@@ @@@@@",
+"@@@@@@@@@@@@@@@@",
+" @@@@@@@@@@@@@@ ",
+"  @@@@@@@@@@@@  ",
+"   @@@@@@@@@@   ",
+"    @@@@@@@@    "};
+
+/* XPM */
+static const char *const left_si_xpm[] = {
+"16 16 2 1",
+"       c None",
+"@      c gray70",
+"                ",
+"      @@        ",
+"     @@@        ",
+"    @@@@        ",
+"   @@@@@@@@ @@@@",
+"  @@@@@@@@@ @@@@",
+" @@@@@@@@@@ @@@@",
+"@@@@@@@@@@@ @@@@",
+"@@@@@@@@@@@ @@@@",
+" @@@@@@@@@@ @@@@",
+"  @@@@@@@@@ @@@@",
+"   @@@@@@@@ @@@@",
+"    @@@@        ",
+"     @@@   @@@@@",
+"      @@    @ @ ",
+"             @  "};
+
+/* XPM */
+static const char *const right_si_xpm[] = {
+"16 16 2 1",
+"       c None",
+"@      c gray70",
+"                ",
+"        @@      ",
+"        @@@     ",
+"        @@@@    ",
+"@@@@ @@@@@@@@   ",
+"@@@@ @@@@@@@@@  ",
+"@@@@ @@@@@@@@@@ ",
+"@@@@ @@@@@@@@@@@",
+"@@@@ @@@@@@@@@@@",
+"@@@@ @@@@@@@@@@ ",
+"@@@@ @@@@@@@@@  ",
+"@@@@ @@@@@@@@   ",
+"        @@@@    ",
+"        @@@@@@@@",
+"        @@  @ @ ",
+"             @  "};
 
 #endif /* __PIXMAPS_H__ */

@@ -1,5 +1,5 @@
-AM_CFLAGS = @GLIB_CFLAGS@
-AM_LIBS = @GLIB_LIBS@
+AM_CPPFLAGS = \
+	-I$(top_srcdir)
 
 noinst_LIBRARIES = libDpip.a
 

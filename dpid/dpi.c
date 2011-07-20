@@ -3,7 +3,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -12,8 +12,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*! \file
@@ -23,20 +22,20 @@
  */
 
 #include <errno.h>
-#include <glib.h>
+#include <stdlib.h>  /* for exit */
 #include "dpid_common.h"
 #include "dpi.h"
 #include "misc_new.h"
 
 /*! \Return
  * Returns path to the dpi_socket_dir file
- * Use g_free to free memory
+ * Use dFree to free memory
  */
 char *a_Dpi_sockdir_file(void)
 {
-   char *dpi_socket_dir = NULL, *dirfile_path = "/.dillo/dpi_socket_dir";
+   char *dpi_socket_dir, *dirfile_path = "/.dillo/dpi_socket_dir";
 
-   dpi_socket_dir = g_strconcat(a_Misc_get_home(), dirfile_path, NULL);
+   dpi_socket_dir = dStrconcat(dGethomedir(), dirfile_path, NULL);
    return dpi_socket_dir;
 }
 
@@ -54,25 +53,25 @@ char *a_Dpi_rd_dpi_socket_dir(char *dirname)
    FILE *dir;
    char *sockdir = NULL, *rcpath;
 
-   rcpath = g_strconcat(a_Misc_get_home(), "/.dillo", NULL);
+   rcpath = dStrconcat(dGethomedir(), "/.dillo", NULL);
 
    /* If .dillo does not exist it is an unrecoverable error */
    if (access(rcpath, F_OK) == -1) {
       ERRMSG("a_Dpi_rd_dpi_socket_dir", "access", errno);
-      fprintf(stderr, " - %s\n", rcpath);
+      MSG_ERR(" - %s\n", rcpath);
       exit(1);
    }
-   g_free(rcpath);
+   dFree(rcpath);
 
    if ((dir = fopen(dirname, "r")) != NULL) {
-      sockdir = a_Misc_get_line(dir);
+      sockdir = dGetline(dir);
       fclose(dir);
    } else if (errno == ENOENT) {
       ERRMSG("a_Dpi_rd_dpi_socket_dir", "fopen", errno);
-      fprintf(stderr, " - %s\n", dirname);
+      MSG_ERR(" - %s\n", dirname);
    } else if (errno != ENOENT) {
       ERRMSG("a_Dpi_rd_dpi_socket_dir", "fopen", errno);
-      fprintf(stderr, " - %s\n", dirname);
+      MSG_ERR(" - %s\n", dirname);
       exit(1);
    }
 
@@ -90,9 +89,9 @@ char *a_Dpi_srs(void)
    char *dirfile_path, *sockdir, *srs_name;
 
    dirfile_path = a_Dpi_sockdir_file();
-   sockdir = g_strstrip(a_Dpi_rd_dpi_socket_dir(dirfile_path));
-   srs_name = g_strconcat(sockdir, "/", "dpid.srs", NULL);
-   g_free(sockdir);
-   g_free(dirfile_path);
+   sockdir = dStrstrip(a_Dpi_rd_dpi_socket_dir(dirfile_path));
+   srs_name = dStrconcat(sockdir, "/", "dpid.srs", NULL);
+   dFree(sockdir);
+   dFree(dirfile_path);
    return (srs_name);
 }

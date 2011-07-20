@@ -1,16 +1,19 @@
-AM_CFLAGS = @GTK_CFLAGS@
-AM_LIBS = @GTK_LIBS@
+AM_CPPFLAGS = \
+	-I$(top_srcdir) \
+	-DDILLO_BINDIR='"$(bindir)/"'
+AM_CFLAGS = @LIBFLTK_CFLAGS@
+AM_CXXFLAGS = @LIBFLTK_CXXFLAGS@
 
-noinst_LIBRARIES = libDio.a
+noinst_LIBRARIES = libDiof.a
 
-libDio_a_SOURCES = \
+libDiof_a_SOURCES = \
 	mime.c \
 	mime.h \
 	about.c \
-	Url.c \
 	Url.h \
-	proto.c	\
 	http.c \
 	dpi.c \
 	IO.c \
+	iowatch.cc \
+	iowatch.hh \
 	IO.h

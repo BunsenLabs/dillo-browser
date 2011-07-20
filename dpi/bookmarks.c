@@ -3,16 +3,16 @@
  *
  * NOTE: this code illustrates how to make a dpi-program.
  *
- * Copyright 2002-2006 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright 2002-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  */
 
-/* Todo: this server is not assembling the received packets.
+/* TODO: this server is not assembling the received packets.
  * This means it currently expects dillo to send full dpi tags
  * within the socket; if that fails, everything stops.
  * This is not hard to fix, mainly is a matter of expecting the
@@ -37,12 +37,12 @@
 #include "../dpip/dpip.h"
 #include "dpiutil.h"
 
-#include <glib.h>
 
-/* This one is tricky, some sources state it should include the byte
- * for the terminating NULL, and others say it shouldn't. */
-# define D_SUN_LEN(ptr) ((size_t) (((struct sockaddr_un *) 0)->sun_path) \
-                        + strlen ((ptr)->sun_path))
+/*
+ * Debugging macros
+ */
+#define _MSG(...)
+#define MSG(...)  printf("[bookmarks dpi]: " __VA_ARGS__)
 
 #define DOCTYPE \
    "<!DOCTYPE HTML PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN'>\n"
@@ -54,17 +54,17 @@
  *   - ' is escaped as %27 in URLs and saved escaped.
  */
 typedef struct {
-   gint key;
-   gint section;
-   gchar *url;
-   gchar *title;
+   int key;
+   int section;
+   char *url;
+   char *title;
 } BmRec;
 
 typedef struct {
-   gint section;
-   gchar *title;
+   int section;
+   char *title;
 
-   gint o_sec;   /* private, for normalization */
+   int o_sec;   /* private, for normalization */
 } BmSec;
 
 
@@ -74,11 +74,11 @@ typedef struct {
 static char *Header = "Content-type: text/html\n\n";
 static char *BmFile = NULL;
 static time_t BmFileTimeStamp = 0;
-static GSList *B_bms = NULL;
-static gint bm_key = 0;
+static Dlist *B_bms = NULL;
+static int bm_key = 0;
 
-static GSList *B_secs = NULL;
-static gint sec_key = 0;
+static Dlist *B_secs = NULL;
+static int sec_key = 0;
 
 static int MODIFY_PAGE_NUM = 1;
 
@@ -90,62 +90,64 @@ static int MODIFY_PAGE_NUM = 1;
 
 /* -- HTML templates ------------------------------------------------------- */
 
-char *mainpage_header =
+static const char *mainpage_header =
 DOCTYPE
 "<html>\n"
 "<head>\n"
 "<title>Bookmarks</title>\n"
 "</head>\n"
-"<body bgcolor='#778899' link='black' vlink='brown'>\n"
+"<body id='dillo_bm' bgcolor='#778899' link='black' vlink='brown'>\n"
 "<table border='1' cellpadding='0' width='100%'>\n"
 " <tr><td>\n"
 "  <table width='100%' bgcolor='#b4b4b4'>\n"
 "   <tr>\n"
-"    <td>&nbsp;Bookmarks::</td>\n"
-"    <td width='100%' align='right'>\n"
+"    <td> Bookmarks :: </td>\n"
+"    <td align='right'>\n"
 "     [<a href='dpi:/bm/modify'>modify</a>]\n"
 "    </td></tr>\n"
 "  </table></td></tr>\n"
 "</table>\n"
 "<br>\n";
 
-char *modifypage_header =
+static const char *modifypage_header =
 DOCTYPE
 "<html>\n"
 "<head>\n"
 "<title>Bookmarks</title>\n"
 "</head>\n"
-"<body bgcolor='#778899' link='black' vlink='brown'>\n"
+"<body id='dillo_bm' bgcolor='#778899' link='black' vlink='brown'>\n"
 "<table border='1' cellpadding='0' width='100%'>\n"
 " <tr><td>\n"
 "  <table width='100%' bgcolor='#b4b4b4'>\n"
 "   <tr>\n"
-"    <td>&nbsp;Bookmarks :: modify</td></tr>\n"
+"    <td> Bookmarks :: modify</td>\n"
+"    <td align='right'>\n"
+"     [<a href='dpi:/bm/'>cancel</a>]\n"
+"    </td>\n"
+"   </tr>\n"
 "  </table></td></tr>                            \n"
 "</table>                                        \n"
 "\n"
-"<form>\n"
+"<form action='modify'>\n"
 "<table width='100%' border='1' cellpadding='0'>\n"
-" <tr><td>\n"
-"  <table width='100%' bgcolor='teal'>\n"
-"   <tr>\n"
-"    <td><b>Select&nbsp;an&nbsp;operation&nbsp;</b></td>\n"
-"    <td><select name='operation'>\n"
-"     <option value='none' selected>--\n"
-"     <option value='delete'>Delete\n"
-"     <option value='move'>Move\n"
-"     <option value='modify'>Modify\n"
-"     <option value='add_sec'>Add Section\n"
-"     <option value='add_url'>Add URL\n"
-"     </select></td>\n"
-"    <td><b>,&nbsp;mark&nbsp;its&nbsp;operands,&nbsp;and&nbsp;</b></td>\n"
-"    <td><input type='submit' name='submit' value='submit.'></td>\n"
-"    <td width='100%'></td>\n"
-"    </tr>\n"
-"  </table></td></tr>\n"
+" <tr style='background-color: teal'>\n"
+"  <td>\n"
+"   <b>Select an operation</b>\n"
+"   <select name='operation'>\n"
+"    <option value='none' selected>--\n"
+"    <option value='delete'>Delete\n"
+"    <option value='move'>Move\n"
+"    <option value='modify'>Modify\n"
+"    <option value='add_sec'>Add Section\n"
+"    <option value='add_url'>Add URL\n"
+"   </select>\n"
+"   <b>, mark its operands, and</b>\n"
+"   <input type='submit' name='submit' value='submit.'>\n"
+"  </td>\n"
+" </tr>\n"
 "</table>\n";
 
-char *mainpage_sections_header =
+static const char *mainpage_sections_header =
 "<table border='1' cellpadding='0' cellspacing='20' width='100%'>\n"
 " <tr valign='top'>\n"
 "  <td>\n"
@@ -154,7 +156,7 @@ char *mainpage_sections_header =
 "     <table width='100%' bgcolor='#b4b4b4'>\n"
 "      <tr><td><small>Sections:</small></td></tr></table></td></tr>\n";
 
-char *modifypage_sections_header =
+static const char *modifypage_sections_header =
 "<table border='1' cellpadding='0' cellspacing='20' width='100%'>\n"
 " <tr valign='top'>\n"
 "  <td>\n"
@@ -163,32 +165,32 @@ char *modifypage_sections_header =
 "     <table width='100%' bgcolor='#b4b4b4'>\n"
 "      <tr><td><small>Sections:</small></td></tr></table></td></tr>\n";
 
-char *mainpage_sections_item =
+static const char *mainpage_sections_item =
 "    <tr><td align='center'>\n"
 "      <a href='#s%d'>%s</a></td></tr>\n";
 
-char *modifypage_sections_item =
+static const char *modifypage_sections_item =
 "    <tr><td>\n"
-"     <table width='100%%' bgcolor='#b4b4b4'cellspacing='0' cellpadding='0'>\n"
+"     <table width='100%%'>\n"
 "      <tr align='center'>"
-"       <td width='1%%'><input type='checkbox' name='s%d'></td>\n"
-"       <td><a href='#s%d'>%s</a></td></tr></table></td></tr>\n";
+"       <td><input type='checkbox' name='s%d'></td>\n"
+"       <td width='100%%'><a href='#s%d'>%s</a></td></tr></table></td></tr>\n";
 
-char *mainpage_sections_footer =
+static const char *mainpage_sections_footer =
 "   </table>\n";
 
-char *modifypage_sections_footer =
+static const char *modifypage_sections_footer =
 "   </table>\n";
 
-char *mainpage_middle1 =
+static const char *mainpage_middle1 =
 "  </td>\n"
 "  <td width='100%'>\n";
 
-char *modifypage_middle1 =
+static const char *modifypage_middle1 =
 "  </td>\n"
 "  <td width='100%'>\n";
 
-char *mainpage_section_card_header =
+static const char *mainpage_section_card_header =
 "   <a name='s%d'></a>\n"
 "   <table bgcolor='#bfbfbf' width='100%%' cellspacing='2'>\n"
 "    <tr>\n"
@@ -196,7 +198,7 @@ char *mainpage_section_card_header =
 "      &nbsp;&nbsp;&nbsp;%s&nbsp;&nbsp;&nbsp;</b></font></td>\n"
 "     <td bgcolor='white' width='100%%'>&nbsp;</td></tr>\n";
 
-char *modifypage_section_card_header =
+static const char *modifypage_section_card_header =
 "   <a name='s%d'></a>\n"
 "   <table bgcolor='#bfbfbf' width='100%%' cellspacing='2'>\n"
 "    <tr>\n"
@@ -204,31 +206,31 @@ char *modifypage_section_card_header =
 "      &nbsp;&nbsp;&nbsp;%s&nbsp;&nbsp;&nbsp;</b></font></td>\n"
 "     <td bgcolor='white' width='100%%'>&nbsp;</td></tr>\n";
 
-char *mainpage_section_card_item =
+static const char *mainpage_section_card_item =
 "    <tr><td colspan='2'>\n"
 "      <a href='%s'>%s</a> </td></tr>\n";
 
-char *modifypage_section_card_item =
+static const char *modifypage_section_card_item =
 "    <tr>\n"
 "     <td colspan='2'><input type='checkbox' name='url%d'>\n"
 "      <a href='%s'>%s</a></td></tr>\n";
 
-char *mainpage_section_card_footer =
+static const char *mainpage_section_card_footer =
 "   </table>\n"
 "   <hr>\n";
 
-char *modifypage_section_card_footer =
+static const char *modifypage_section_card_footer =
 "   </table>\n"
 "   <hr>\n";
 
-char *mainpage_footer =
+static const char *mainpage_footer =
 "  </td>\n"
 " </tr>\n"
 "</table>\n"
 "</body>\n"
 "</html>\n";
 
-char *modifypage_footer =
+static const char *modifypage_footer =
 "  </td>\n"
 " </tr>\n"
 "</table>\n"
@@ -237,21 +239,28 @@ char *modifypage_footer =
 "</html>\n";
 
 /* ------------------------------------------------------------------------- */
-char *modifypage_add_section_page =
+static const char *modifypage_add_section_page =
 DOCTYPE
 "<html>\n"
 "<head>\n"
 "<title>Bookmarks</title>\n"
 "</head>\n"
-"<body bgcolor='#778899' link='black' vlink='brown'>\n"
+"<body id='dillo_bm' bgcolor='#778899' link='black' vlink='brown'>\n"
 "<table border='1' cellpadding='0' width='100%'>\n"
 " <tr><td colspan='2'>\n"
 "  <table bgcolor='#b4b4b4' width='100%'>\n"
-"   <tr><td bgcolor='#b4b4b4'>&nbsp;Modify bookmarks:: add section\n"
-"   </td></tr></table></td></tr>\n"
+"   <tr>\n"
+"    <td bgcolor='#b4b4b4'>\n"
+"     Modify bookmarks :: add section\n"
+"    </td>\n"
+"    <td align='right'>\n"
+"     [<a href='dpi:/bm/'>cancel</a>]\n"
+"    </td>\n"
+"   </tr>\n"
+"  </table></td></tr>\n"
 "</table>\n"
 "<br>\n"
-"<form>\n"
+"<form action='modify'>\n"
 " <input type='hidden' name='operation' value='add_section'>\n"
 "<table border='1' width='100%'>\n"
 " <tr>\n"
@@ -277,34 +286,39 @@ DOCTYPE
 "\n";
 
 /* ------------------------------------------------------------------------- */
-char *modifypage_update_header =
+static const char *modifypage_update_header =
 DOCTYPE
 "<html>\n"
 "<head>\n"
 "<title>Bookmarks</title>\n"
 "</head>\n"
-"<body bgcolor='#778899' link='black' vlink='brown'>\n"
+"<body id='dillo_bm' bgcolor='#778899' link='black' vlink='brown'>\n"
 "<table border='1' cellpadding='0' width='100%'>\n"
 " <tr><td colspan='2'>\n"
 "  <table bgcolor='#b4b4b4' width='100%'>\n"
-"   <tr><td bgcolor='#b4b4b4'>&nbsp;Modify bookmarks:: update\n"
-"   </td></tr></table></td></tr>\n"
+"   <tr><td bgcolor='#b4b4b4'> Modify bookmarks :: update\n"
+"    </td>\n"
+"    <td align='right'>\n"
+"     [<a href='dpi:/bm/'>cancel</a>]\n"
+"    </td>\n"
+"   </tr>\n"
+"  </table></td></tr>\n"
 "</table>\n"
 "<br>\n"
-"<form>\n"
+"<form action='modify'>\n"
 "<input type='hidden' name='operation' value='modify2'>\n";
 
-char *modifypage_update_title =
+static const char *modifypage_update_title =
 "<table border='1' width='100%%'>\n"
 " <tr>\n"
 "  <td bgcolor='olive'><b>%s</b></td>\n"
 "  <td bgcolor='white' width='100%%'></td></tr>\n"
 "</table>\n";
 
-char *modifypage_update_item_header =
+static const char *modifypage_update_item_header =
 "<table width='100%' cellpadding='10'>\n";
 
-char *modifypage_update_item =
+static const char *modifypage_update_item =
 "<tr><td>\n"
 " <table width='100%%' bgcolor='teal'>\n"
 "  <tr>\n"
@@ -317,7 +331,7 @@ char *modifypage_update_item =
 " </table>\n"
 " </td></tr>\n";
 
-char *modifypage_update_item2 =
+static const char *modifypage_update_item2 =
 "<tr><td>\n"
 " <table width='100%%' bgcolor='teal'>\n"
 "  <tr>\n"
@@ -327,10 +341,10 @@ char *modifypage_update_item2 =
 " </table>\n"
 " </td></tr>\n";
 
-char *modifypage_update_item_footer =
+static const char *modifypage_update_item_footer =
 "</table>\n";
 
-char *modifypage_update_footer =
+static const char *modifypage_update_footer =
 "<table width='100%' cellpadding='4' border='0'>\n"
 "<tr><td bgcolor='#a0a0a0'>\n"
 " <input type='submit' name='submit' value='submit.'></td></tr>\n"
@@ -340,21 +354,26 @@ char *modifypage_update_footer =
 "</html>\n";
 
 /* ------------------------------------------------------------------------- */
-char *modifypage_add_url =
+static const char *modifypage_add_url =
 DOCTYPE
 "<html>\n"
 "<head>\n"
 "<title>Bookmarks</title>\n"
 "</head>\n"
-"<body bgcolor='#778899' link='black' vlink='brown'>\n"
+"<body id='dillo_bm' bgcolor='#778899' link='black' vlink='brown'>\n"
 "<table border='1' cellpadding='0' width='100%'>\n"
 " <tr><td colspan='2'>\n"
 "  <table bgcolor='#b4b4b4' width='100%'>\n"
-"   <tr><td bgcolor='#b4b4b4'>&nbsp;Modify bookmarks:: add url\n"
-"   </td></tr></table></td></tr>\n"
+"   <tr><td bgcolor='#b4b4b4'> Modify bookmarks :: add url\n"
+"    </td>\n"
+"    <td align='right'>\n"
+"     [<a href='dpi:/bm/'>cancel</a>]\n"
+"    </td>\n"
+"   </tr>\n"
+"  </table></td></tr>\n"
 "</table>\n"
 "<br>\n"
-"<form>\n"
+"<form action='modify'>\n"
 "<input type='hidden' name='operation' value='add_url2'>\n"
 "<table border='1' width='100%'>\n"
 " <tr>\n"
@@ -396,7 +415,7 @@ static char *make_one_line_str(char *str)
       if (str[i] == ' ')
          ++n;
 
-   new_str = g_new(char, strlen(str) + 6*n + 1);
+   new_str = dNew(char, strlen(str) + 6*n + 1);
    new_str[0] = 0;
 
    for (i = 0, j = 0; str[i]; ++i) {
@@ -423,7 +442,7 @@ static void Unencode_str(char *e_str)
       if (*e == '+') {
          *p = ' ';
       } else if (*e == '%') {
-         if (g_strncasecmp(e, "%0D%0A", 6) == 0) {
+         if (dStrncasecmp(e, "%0D%0A", 6) == 0) {
             *p = '\n';
             e += 5;
          } else {
@@ -439,47 +458,16 @@ static void Unencode_str(char *e_str)
 }
 
 /*
- * Read a line of text up to the newline character, store it into a newly
- * allocated string and return it.
- */
-static char *Get_line(FILE *stream)
-{
-   guint i, size = 64;
-   int ch;
-   char *buf;
-
-   buf = g_new(char, size);
-
-   for (i = 0; (ch = fgetc(stream)) != EOF; ++i) {
-      if (i + 1 == size) {
-         size *= 2;
-         buf = g_realloc(buf, size);
-      }
-      if ((buf[i] = ch) == '\n' && ++i)
-         break;
-   }
-   buf[i] = 0;
-
-   if (i > 0) {
-      buf = g_realloc(buf, i + 1);
-   } else {
-      g_free(buf);
-      buf = NULL;
-   }
-   return buf;
-}
-
-/*
  * Send a short message to dillo's status bar.
  */
-static int Bmsrv_dpi_send_status_msg(SockHandler *sh, char *str)
+static int Bmsrv_dpi_send_status_msg(Dsh *sh, char *str)
 {
    int st;
    char *d_cmd;
 
    d_cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "send_status_message", str);
-   st = sock_handler_write_str(sh, d_cmd, 1);
-   g_free(d_cmd);
+   st = a_Dpip_dsh_write_str(sh, 1, d_cmd);
+   dFree(d_cmd);
    return st;
 }
 
@@ -487,64 +475,56 @@ static int Bmsrv_dpi_send_status_msg(SockHandler *sh, char *str)
 /*
  * Compare function for searching a bookmark by its key
  */
-static gint Bms_key_cmp(gconstpointer node, gconstpointer key)
+static int Bms_node_by_key_cmp(const void *node, const void *key)
 {
-   return ( GPOINTER_TO_INT(key) != ((BmRec *)node)->key );
+   return ((BmRec *)node)->key - VOIDP2INT(key);
 }
 
 /*
  * Compare function for searching a bookmark by section
  */
-static gint Bms_bysec_cmp(gconstpointer node, gconstpointer key)
+static int Bms_node_by_section_cmp(const void *node, const void *key)
 {
-   return ( GPOINTER_TO_INT(key) != ((BmRec *)node)->section );
+   return ((BmRec *)node)->section - VOIDP2INT(key);
 }
 
 /*
  * Compare function for searching a section by its number
  */
-static gint Bms_sec_cmp(gconstpointer node, gconstpointer key)
+static int Bms_sec_by_number_cmp(const void *node, const void *key)
 {
-   return ( GPOINTER_TO_INT(key) != ((BmSec *)node)->section );
+   return ((BmSec *)node)->section - VOIDP2INT(key);
 }
 
 /*
  * Return the Bm record by key
  */
-static BmRec *Bms_get(gint key)
+static BmRec *Bms_get(int key)
 {
-   GSList *list;
-
-   list = g_slist_find_custom(B_bms, GINT_TO_POINTER(key),
-                              Bms_key_cmp);
-   return (list) ? list->data : NULL;
+   return dList_find_custom(B_bms, INT2VOIDP(key), Bms_node_by_key_cmp);
 }
 
 /*
  * Return the Section record by key
  */
-static BmSec *Bms_get_sec(gint key)
+static BmSec *Bms_get_sec(int key)
 {
-   GSList *list;
-
-   list = g_slist_find_custom(B_secs, GINT_TO_POINTER(key),
-                              Bms_sec_cmp);
-   return (list) ? list->data : NULL;
+   return dList_find_custom(B_secs, INT2VOIDP(key), Bms_sec_by_number_cmp);
 }
 
 /*
  * Add a bookmark
  */
-static void Bms_add(gint section, char *url, char *title)
+static void Bms_add(int section, char *url, char *title)
 {
-   BmRec *node;
+   BmRec *bm_node;
 
-   node = g_new(BmRec, 1);
-   node->key = ++bm_key;
-   node->section = section;
-   node->url = Escape_uri_str(url, "'");
-   node->title = Escape_html_str(title);
-   B_bms = g_slist_append(B_bms, node);
+   bm_node = dNew(BmRec, 1);
+   bm_node->key = ++bm_key;
+   bm_node->section = section;
+   bm_node->url = Escape_uri_str(url, "'");
+   bm_node->title = Escape_html_str(title);
+   dList_append(B_bms, bm_node);
 }
 
 /*
@@ -552,105 +532,95 @@ static void Bms_add(gint section, char *url, char *title)
  */
 static void Bms_sec_add(char *title)
 {
-   BmSec *node;
+   BmSec *sec_node;
 
-   node = g_new(BmSec, 1);
-   node->section = sec_key++;
-   node->title = Escape_html_str(title);
-   B_secs = g_slist_append(B_secs, node);
+   sec_node = dNew(BmSec, 1);
+   sec_node->section = sec_key++;
+   sec_node->title = Escape_html_str(title);
+   dList_append(B_secs, sec_node);
 }
 
 /*
  * Delete a bookmark by its key
  */
-static void Bms_del(gint key)
+static void Bms_del(int key)
 {
-   GSList *list;
-   BmRec *node;
+   BmRec *bm_node;
 
-   list = g_slist_find_custom(B_bms, GINT_TO_POINTER(key),
-                              Bms_key_cmp);
-   if (list) {
-      node = list->data;
-      g_free(node->title);
-      g_free(node->url);
-      g_free(list->data);
-      B_bms = g_slist_remove(B_bms, list->data);
+   bm_node = dList_find_custom(B_bms, INT2VOIDP(key), Bms_node_by_key_cmp);
+   if (bm_node) {
+      dList_remove(B_bms, bm_node);
+      dFree(bm_node->title);
+      dFree(bm_node->url);
+      dFree(bm_node);
    }
-   if (B_bms == NULL)
+   if (dList_length(B_bms) == 0)
       bm_key = 0;
 }
 
 /*
  * Delete a section and its bookmarks by section number
  */
-static void Bms_sec_del(gint section)
+static void Bms_sec_del(int section)
 {
-   GSList *list;
    BmSec *sec_node;
    BmRec *bm_node;
 
-   list = g_slist_find_custom(B_secs, GINT_TO_POINTER(section),
-                              Bms_sec_cmp);
-   if (list) {
-      sec_node = list->data;
-      g_free(sec_node->title);
-      g_free(list->data);
-      B_secs = g_slist_remove(B_secs, list->data);
+   sec_node = dList_find_custom(B_secs, INT2VOIDP(section),
+                                Bms_sec_by_number_cmp);
+   if (sec_node) {
+      dList_remove(B_secs, sec_node);
+      dFree(sec_node->title);
+      dFree(sec_node);
 
       /* iterate B_bms and remove those that match the section */
-      while ((list = g_slist_find_custom(B_bms, GINT_TO_POINTER(section),
-                                         Bms_bysec_cmp))) {
-         bm_node = list->data;
+      while ((bm_node = dList_find_custom(B_bms, INT2VOIDP(section),
+                                          Bms_node_by_section_cmp))) {
          Bms_del(bm_node->key);
       }
    }
-   if (B_secs == NULL)
+   if (dList_length(B_secs) == 0)
       sec_key = 0;
 }
 
 /*
  * Move a bookmark to another section
  */
-static void Bms_move(gint key, gint target_section)
+static void Bms_move(int key, int target_section)
 {
-   GSList *list;
+   BmRec *bm_node;
 
-   list = g_slist_find_custom(B_bms, GINT_TO_POINTER(key), Bms_key_cmp);
-   if (list) {
-      BmRec *node = list->data;
-      node->section = target_section;
+   bm_node = dList_find_custom(B_bms, INT2VOIDP(key), Bms_node_by_key_cmp);
+   if (bm_node) {
+      bm_node->section = target_section;
    }
 }
 
 /*
  * Update a bookmark title by key
  */
-static void Bms_update_title(gint key, gchar *n_title)
+static void Bms_update_title(int key, char *n_title)
 {
-   GSList *list;
+   BmRec *bm_node;
 
-   list = g_slist_find_custom(B_bms, GINT_TO_POINTER(key), Bms_key_cmp);
-   if (list) {
-      BmRec *node = list->data;
-      g_free(node->title);
-      node->title = Escape_html_str(n_title);
+   bm_node = dList_find_custom(B_bms, INT2VOIDP(key), Bms_node_by_key_cmp);
+   if (bm_node) {
+      dFree(bm_node->title);
+      bm_node->title = Escape_html_str(n_title);
    }
 }
 
 /*
  * Update a section title by key
  */
-static void Bms_update_sec_title(gint key, gchar *n_title)
+static void Bms_update_sec_title(int key, char *n_title)
 {
-   GSList *list;
+   BmSec *sec_node;
 
-   list = g_slist_find_custom(B_secs, GINT_TO_POINTER(key),
-                              Bms_sec_cmp);
-   if (list) {
-      BmSec *node = list->data;
-      g_free(node->title);
-      node->title = Escape_html_str(n_title);
+   sec_node = dList_find_custom(B_secs, INT2VOIDP(key), Bms_sec_by_number_cmp);
+   if (sec_node) {
+      dFree(sec_node->title);
+      sec_node->title = Escape_html_str(n_title);
    }
 }
 
@@ -663,13 +633,11 @@ static void Bms_free(void)
    BmSec *sec_node;
 
    /* free B_bms */
-   while (B_bms) {
-      bm_node = B_bms->data;
+   while ((bm_node = dList_nth_data(B_bms, 0))) {
       Bms_del(bm_node->key);
    }
    /* free B_secs */
-   while (B_secs) {
-      sec_node = B_secs->data;
+   while ((sec_node = dList_nth_data(B_secs, 0))) {
       Bms_sec_del(sec_node->section);
    }
 }
@@ -681,28 +649,23 @@ static void Bms_normalize(void)
 {
    BmRec *bm_node;
    BmSec *sec_node;
-   GSList *list1, *list2;
-   gint n;
+   int i, j;
 
    /* we need at least one section */
-   if (!B_secs)
+   if (dList_length(B_secs) == 0)
       Bms_sec_add("Unclassified");
 
    /* make correlative section numbers */
-   n = 0;
-   for (list1 = B_secs; list1; list1 = list1->next) {
-      sec_node = list1->data;
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
       sec_node->o_sec = sec_node->section;
-      sec_node->section = n++;
+      sec_node->section = i;
    }
 
    /* iterate B_secs and make the changes in B_bms */
-   for (list1 = B_secs; list1; list1 = list1->next) {
-      sec_node = list1->data;
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
       if (sec_node->section != sec_node->o_sec) {
          /* update section numbers */
-         for (list2 = B_bms; list2; list2 = list2->next) {
-            bm_node = list2->data;
+         for (j = 0; (bm_node = dList_nth_data(B_bms, j)); ++j) {
             if (bm_node->section == sec_node->o_sec)
                bm_node->section = sec_node->section;
          }
@@ -717,25 +680,38 @@ static void Bms_normalize(void)
  */
 static void Bms_check_import(void)
 {
-   gchar *OldBmFile;
+   char *OldBmFile;
    char *cmd1 =
       "echo \":s0: Unclassified\" > %s";
    char *cmd2 =
       "grep -i \"href\" %s | "
       "sed -e 's/<li><A HREF=\"/s0 /' -e 's/\">/ /' -e 's/<.*$//' >> %s";
-   GString *gstr = g_string_new("");
+   Dstr *dstr = dStr_new("");
+   int rc;
 
 
    if (access(BmFile, F_OK) != 0) {
-      OldBmFile = g_strconcat(g_get_home_dir(),
-                          "/", ".dillo/bookmarks.html", NULL);
+      OldBmFile = dStrconcat(dGethomedir(), "/.dillo/bookmarks.html", NULL);
       if (access(OldBmFile, F_OK) == 0) {
-         g_string_sprintf(gstr, cmd1, BmFile);
-         system(gstr->str);
-         g_string_sprintf(gstr, cmd2, OldBmFile, BmFile);
-         system(gstr->str);
-         g_string_free(gstr, TRUE);
-         g_free(OldBmFile);
+         dStr_sprintf(dstr, cmd1, BmFile);
+         rc = system(dstr->str);
+         if (rc == 127) {
+            MSG("Bookmarks: /bin/sh could not be executed\n");
+         } else if (rc == -1) {
+            MSG("Bookmarks: process creation failure: %s\n",
+                dStrerror(errno));
+         }
+         dStr_sprintf(dstr, cmd2, OldBmFile, BmFile);
+         rc = system(dstr->str);
+         if (rc == 127) {
+            MSG("Bookmarks: /bin/sh could not be executed\n");
+         } else if (rc == -1) {
+            MSG("Bookmarks: process creation failure: %s\n",
+                dStrerror(errno));
+         }
+
+         dStr_free(dstr, TRUE);
+         dFree(OldBmFile);
       }
    }
 }
@@ -760,7 +736,7 @@ static int Bms_load(void)
    }
 
    /* load bm file into memory */
-   while ((buf = Get_line(BmTxt)) != NULL) {
+   while ((buf = dGetline(BmTxt)) != NULL) {
       if (buf[0] == 's') {
          /* get section, url and title */
          section = strtol(buf + 1, NULL, 10);
@@ -771,7 +747,7 @@ static int Bms_load(void)
          p = strchr(p, '\n'); *p = 0;
          u_title = Unescape_html_str(title);
          Bms_add(section, url, u_title);
-         g_free(u_title);
+         dFree(u_title);
 
       } else if (buf[0] == ':' && buf[1] == 's') {
          /* section = strtol(buf + 2, NULL, 10); */
@@ -781,9 +757,9 @@ static int Bms_load(void)
          Bms_sec_add(title);
 
       } else {
-         g_print("Syntax error in bookmarks file:\n %s", buf);
+         MSG("Syntax error in bookmarks file:\n %s", buf);
       }
-      g_free(buf);
+      dFree(buf);
    }
    fclose(BmTxt);
 
@@ -811,7 +787,7 @@ static int Bms_cond_load(void)
          TimeStamp.st_mtime = 0;
    }
 
-   if (!BmFileTimeStamp || !B_bms || !B_secs ||
+   if (!BmFileTimeStamp || !dList_length(B_bms) || !dList_length(B_secs) ||
        BmFileTimeStamp < TimeStamp.st_mtime) {
       Bms_load();
       st = 1;
@@ -830,16 +806,16 @@ static int Bms_save(void)
    FILE *BmTxt;
    BmRec *bm_node;
    BmSec *sec_node;
-   GSList *list, *list2;
    struct stat BmStat;
-   gchar *u_title;
-   GString *gstr = g_string_new("");
+   char *u_title;
+   int i, j;
+   Dstr *dstr = dStr_new("");
 
    /* make a safety backup */
    if (stat(BmFile, &BmStat) == 0 && BmStat.st_size > 256) {
-      gchar *BmFileBak = g_strconcat(BmFile, ".bak", NULL);
+      char *BmFileBak = dStrconcat(BmFile, ".bak", NULL);
       rename(BmFile, BmFileBak);
-      g_free(BmFileBak);
+      dFree(BmFileBak);
    }
 
    /* open bm file */
@@ -852,30 +828,27 @@ static int Bms_save(void)
    Bms_normalize();
 
    /* save sections */
-   for (list = B_secs; list; list = list->next) {
-      sec_node = list->data;
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
       u_title = Unescape_html_str(sec_node->title);
-      g_string_sprintf(gstr, ":s%d: %s\n", sec_node->section, u_title);
-      fwrite(gstr->str, (size_t)gstr->len, 1, BmTxt);
-      g_free(u_title);
+      dStr_sprintf(dstr, ":s%d: %s\n", sec_node->section, u_title);
+      fwrite(dstr->str, (size_t)dstr->len, 1, BmTxt);
+      dFree(u_title);
    }
 
    /* save bookmarks  (section url title) */
-   for (list = B_secs; list; list = list->next) {
-      sec_node = list->data;
-      for (list2 = B_bms; list2; list2 = list2->next) {
-         bm_node = list2->data;
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
+      for (j = 0; (bm_node = dList_nth_data(B_bms, j)); ++j) {
          if (bm_node->section == sec_node->section) {
             u_title = Unescape_html_str(bm_node->title);
-            g_string_sprintf(gstr, "s%d %s %s\n",
-                             bm_node->section, bm_node->url, u_title);
-            fwrite(gstr->str, (size_t)gstr->len, 1, BmTxt);
-            g_free(u_title);
+            dStr_sprintf(dstr, "s%d %s %s\n",
+                         bm_node->section, bm_node->url, u_title);
+            fwrite(dstr->str, (size_t)dstr->len, 1, BmTxt);
+            dFree(u_title);
          }
       }
    }
 
-   g_string_free(gstr, TRUE);
+   dStr_free(dstr, TRUE);
    fclose(BmTxt);
 
    /* keep track of the timestamp */
@@ -890,7 +863,7 @@ static int Bms_save(void)
 /*
  * Add a new bookmark to DB :)
  */
-static int Bmsrv_add_bm(SockHandler *sh, char *url, char *title)
+static int Bmsrv_add_bm(Dsh *sh, char *url, char *title)
 {
    char *u_title;
    char *msg="Added bookmark!";
@@ -899,7 +872,7 @@ static int Bmsrv_add_bm(SockHandler *sh, char *url, char *title)
    /* Add in memory */
    u_title = Unescape_html_str(title);
    Bms_add(section, url, u_title);
-   g_free(u_title);
+   dFree(u_title);
 
    /* Write to file */
    Bms_save();
@@ -915,7 +888,7 @@ static int Bmsrv_add_bm(SockHandler *sh, char *url, char *title)
 /*
  * Count how many sections and urls were marked in a request
  */
-static void Bmsrv_count_urls_and_sections(char *url, gint *n_sec, gint *n_url)
+static void Bmsrv_count_urls_and_sections(char *url, int *n_sec, int *n_url)
 {
    char *p, *q;
    int i;
@@ -938,14 +911,14 @@ static void Bmsrv_count_urls_and_sections(char *url, gint *n_sec, gint *n_url)
  * Send a dpi reload request
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_send_reload_request(SockHandler *sh, char *url)
+static int Bmsrv_send_reload_request(Dsh *sh, char *url)
 {
-   gint st;
+   int st;
    char *d_cmd;
 
    d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "reload_request", url);
-   st = sock_handler_write_str(sh, d_cmd, 1) ? 1 : 0;
-   g_free(d_cmd);
+   st = a_Dpip_dsh_write_str(sh, 1, d_cmd) ? 1 : 0;
+   dFree(d_cmd);
    return st;
 }
 
@@ -953,70 +926,66 @@ static int Bmsrv_send_reload_request(SockHandler *sh, char *url)
  * Send the HTML for the modify page
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_send_modify_page(SockHandler *sh)
+static int Bmsrv_send_modify_page(Dsh *sh)
 {
-   static GString *gstr = NULL;
-   gchar *l_title;
-   GSList *list1, *list2;
+   static Dstr *dstr = NULL;
+   char *l_title;
    BmSec *sec_node;
    BmRec *bm_node;
+   int i, j;
 
-   if (!gstr)
-      gstr = g_string_new("");
+   if (!dstr)
+      dstr = dStr_new("");
 
    /* send modify page header */
-   if (sock_handler_write_str(sh, modifypage_header, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, modifypage_header))
       return 1;
 
    /* write sections header */
-   if (sock_handler_write_str(sh, modifypage_sections_header, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, modifypage_sections_header))
       return 1;
    /* write sections */
-   for (list1 = B_secs; list1; list1 = list1->next) {
-      sec_node = list1->data;
-      g_string_sprintf(gstr, modifypage_sections_item,
-                       sec_node->section, sec_node->section, sec_node->title);
-      if (sock_handler_write_str(sh, gstr->str, 0))
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
+      dStr_sprintf(dstr, modifypage_sections_item,
+                   sec_node->section, sec_node->section, sec_node->title);
+      if (a_Dpip_dsh_write_str(sh, 0, dstr->str))
          return 1;
    }
    /* write sections footer */
-   if (sock_handler_write_str(sh, modifypage_sections_footer, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, modifypage_sections_footer))
       return 1;
 
    /* send page middle */
-   if (sock_handler_write_str(sh, modifypage_middle1, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, modifypage_middle1))
       return 1;
 
    /* send bookmark cards */
-   for (list1 = B_secs; list1; list1 = list1->next) {
-      sec_node = list1->data;
-
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
       /* send card header */
       l_title = make_one_line_str(sec_node->title);
-      g_string_sprintf(gstr, modifypage_section_card_header,
-                       sec_node->section, l_title);
-      g_free(l_title);
-      if (sock_handler_write_str(sh, gstr->str, 0))
+      dStr_sprintf(dstr, modifypage_section_card_header,
+                   sec_node->section, l_title);
+      dFree(l_title);
+      if (a_Dpip_dsh_write_str(sh, 0, dstr->str))
          return 1;
 
       /* send section's bookmarks */
-      for (list2 = B_bms; list2; list2 = list2->next) {
-         bm_node = list2->data;
+      for (j = 0; (bm_node = dList_nth_data(B_bms, j)); ++j) {
          if (bm_node->section == sec_node->section) {
-            g_string_sprintf(gstr, modifypage_section_card_item,
-                             bm_node->key, bm_node->url, bm_node->title);
-            if (sock_handler_write_str(sh, gstr->str, 0))
+            dStr_sprintf(dstr, modifypage_section_card_item,
+                         bm_node->key, bm_node->url, bm_node->title);
+            if (a_Dpip_dsh_write_str(sh, 0, dstr->str))
                return 1;
          }
       }
 
       /* send card footer */
-      if (sock_handler_write_str(sh, modifypage_section_card_footer, 0))
+      if (a_Dpip_dsh_write_str(sh, 0, modifypage_section_card_footer))
          return 1;
    }
 
    /* finish page */
-   if (sock_handler_write_str(sh, modifypage_footer, 1))
+   if (a_Dpip_dsh_write_str(sh, 1, modifypage_footer))
       return 1;
 
    return 2;
@@ -1026,10 +995,10 @@ static int Bmsrv_send_modify_page(SockHandler *sh)
  * Send the HTML for the modify page for "add section"
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_send_modify_page_add_section(SockHandler *sh)
+static int Bmsrv_send_modify_page_add_section(Dsh *sh)
 {
    /* send modify page2 */
-   if (sock_handler_write_str(sh, modifypage_add_section_page, 1))
+   if (a_Dpip_dsh_write_str(sh, 1, modifypage_add_section_page))
       return 1;
 
    return 2;
@@ -1039,9 +1008,9 @@ static int Bmsrv_send_modify_page_add_section(SockHandler *sh)
  * Send the HTML for the modify page for "add url"
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_send_modify_page_add_url(SockHandler *sh)
+static int Bmsrv_send_modify_page_add_url(Dsh *sh)
 {
-   if (sock_handler_write_str(sh, modifypage_add_url, 1))
+   if (a_Dpip_dsh_write_str(sh, 1, modifypage_add_url))
       return 1;
    return 2;
 }
@@ -1053,10 +1022,10 @@ static int Bmsrv_send_modify_page_add_url(SockHandler *sh)
  *   - send the modify page for the marked urls and sections
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_send_modify_update(SockHandler *sh, char *url)
+static int Bmsrv_send_modify_update(Dsh *sh, char *url)
 {
    static char *url1 = NULL;
-   static GString *gstr = NULL;
+   static Dstr *dstr = NULL;
    char *p, *q;
    int i, key, n_sec, n_url;
    BmRec *bm_node;
@@ -1064,27 +1033,27 @@ static int Bmsrv_send_modify_update(SockHandler *sh, char *url)
 
    /* bookmarks were loaded before */
 
-   if (!gstr)
-      gstr = g_string_new("");
+   if (!dstr)
+      dstr = dStr_new("");
 
    if (sh == NULL) {
       /* just copy url */
-      g_free(url1);
-      url1 = g_strdup(url);
+      dFree(url1);
+      url1 = dStrdup(url);
       return 0;
    }
 
    /* send HTML here */
-   if (sock_handler_write_str(sh, modifypage_update_header, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, modifypage_update_header))
       return 1;
 
    /* Count number of marked urls and sections */
    Bmsrv_count_urls_and_sections(url1, &n_sec, &n_url);
 
    if (n_sec) {
-      g_string_sprintf(gstr, modifypage_update_title, "Update&nbsp;sections:");
-      sock_handler_write_str(sh, gstr->str, 0);
-      sock_handler_write_str(sh, modifypage_update_item_header, 0);
+      dStr_sprintf(dstr, modifypage_update_title, "Update&nbsp;sections:");
+      a_Dpip_dsh_write_str(sh, 0, dstr->str);
+      a_Dpip_dsh_write_str(sh, 0, modifypage_update_item_header);
       /* send items here */
       p = strchr(url1, '?');
       for (q = p; (q = strstr(q, "&s")); ++q) {
@@ -1092,19 +1061,19 @@ static int Bmsrv_send_modify_update(SockHandler *sh, char *url)
          if (q[2+i] == '=') {
             key = strtol(q + 2, NULL, 10);
             if ((sec_node = Bms_get_sec(key))) {
-               g_string_sprintf(gstr, modifypage_update_item2,
-                                sec_node->section, sec_node->title);
-               sock_handler_write_str(sh, gstr->str, 0);
+               dStr_sprintf(dstr, modifypage_update_item2,
+                            sec_node->section, sec_node->title);
+               a_Dpip_dsh_write_str(sh, 0, dstr->str);
             }
          }
       }
-      sock_handler_write_str(sh, modifypage_update_item_footer, 0);
+      a_Dpip_dsh_write_str(sh, 0, modifypage_update_item_footer);
    }
 
    if (n_url) {
-      g_string_sprintf(gstr, modifypage_update_title, "Update&nbsp;titles:");
-      sock_handler_write_str(sh, gstr->str, 0);
-      sock_handler_write_str(sh, modifypage_update_item_header, 0);
+      dStr_sprintf(dstr, modifypage_update_title, "Update&nbsp;titles:");
+      a_Dpip_dsh_write_str(sh, 0, dstr->str);
+      a_Dpip_dsh_write_str(sh, 0, modifypage_update_item_header);
       /* send items here */
       p = strchr(url1, '?');
       for (q = p; (q = strstr(q, "&url")); ++q) {
@@ -1112,15 +1081,15 @@ static int Bmsrv_send_modify_update(SockHandler *sh, char *url)
          if (q[4+i] == '=') {
             key = strtol(q + 4, NULL, 10);
             bm_node = Bms_get(key);
-            g_string_sprintf(gstr, modifypage_update_item,
-                             bm_node->key, bm_node->title, bm_node->url);
-            sock_handler_write_str(sh, gstr->str, 0);
+            dStr_sprintf(dstr, modifypage_update_item,
+                         bm_node->key, bm_node->title, bm_node->url);
+            a_Dpip_dsh_write_str(sh, 0, dstr->str);
          }
       }
-      sock_handler_write_str(sh, modifypage_update_item_footer, 0);
+      a_Dpip_dsh_write_str(sh, 0, modifypage_update_item_footer);
    }
 
-   sock_handler_write_str(sh, modifypage_update_footer, 1);
+   a_Dpip_dsh_write_str(sh, 1, modifypage_update_footer);
 
    return 2;
 }
@@ -1129,19 +1098,19 @@ static int Bmsrv_send_modify_update(SockHandler *sh, char *url)
  * Make the modify-page and send it back
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_send_modify_answer(SockHandler *sh, char *url)
+static int Bmsrv_send_modify_answer(Dsh *sh, char *url)
 {
    char *d_cmd;
    int st;
 
    d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page", url);
-   st = sock_handler_write_str(sh, d_cmd, 1);
-   g_free(d_cmd);
+   st = a_Dpip_dsh_write_str(sh, 1, d_cmd);
+   dFree(d_cmd);
    if (st != 0)
       return 1;
 
    /* Send HTTP header */
-   if (sock_handler_write(sh, Header, strlen(Header), 0) != 0) {
+   if (a_Dpip_dsh_write_str(sh, 0, Header) != 0) {
       return 1;
    }
 
@@ -1166,10 +1135,10 @@ static int Bmsrv_send_modify_answer(SockHandler *sh, char *url)
  * Parse a delete bms request, delete them, and update bm file.
  * Return code: { 0:OK, 1:Abort }
  */
-static int Bmsrv_modify_delete(SockHandler *sh, char *url)
+static int Bmsrv_modify_delete(char *url)
 {
-   gchar *p;
-   gint nb, ns, key;
+   char *p;
+   int nb, ns, key;
 
    /* bookmarks were loaded before */
 
@@ -1212,7 +1181,7 @@ static int Bmsrv_modify_delete(SockHandler *sh, char *url)
  * Parse a move urls request, move and update bm file.
  * Return code: { 0:OK, 1:Abort }
  */
-static int Bmsrv_modify_move(SockHandler *sh, char *url)
+static int Bmsrv_modify_move(char *url)
 {
    char *p;
    int n, section = 0, key;
@@ -1251,7 +1220,7 @@ static int Bmsrv_modify_move(SockHandler *sh, char *url)
  * Parse a modify request: update urls and sections, then save.
  * Return code: { 0:OK, 1:Abort }
  */
-static int Bmsrv_modify_update(SockHandler *sh, char *url)
+static int Bmsrv_modify_update(char *url)
 {
    char *p, *q, *title;
    int i, key;
@@ -1266,13 +1235,13 @@ static int Bmsrv_modify_update(SockHandler *sh, char *url)
             /* we have a title/key to change */
             key = strtol(p + 1, NULL, 10);
             if ((q = strchr(p + 1, '&')))
-               title = g_strndup(p + 2 + i, (guint)(q - (p + 2 + i)));
+               title = dStrndup(p + 2 + i, (uint_t)(q - (p + 2 + i)));
             else
-               title = g_strdup(p + 2 + i);
+               title = dStrdup(p + 2 + i);
 
             Unencode_str(title);
             Bms_update_sec_title(key, title);
-            g_free(title);
+            dFree(title);
          }
       }
    }
@@ -1285,13 +1254,13 @@ static int Bmsrv_modify_update(SockHandler *sh, char *url)
             /* we have a title/key to change */
             key = strtol(p + 5, NULL, 10);
             if ((q = strchr(p + 5, '&')))
-               title = g_strndup(p + 6 + i, (guint)(q - (p + 6 + i)));
+               title = dStrndup(p + 6 + i, (uint_t)(q - (p + 6 + i)));
             else
-               title = g_strdup(p + 6 + i);
+               title = dStrdup(p + 6 + i);
 
             Unencode_str(title);
             Bms_update_title(key, title);
-            g_free(title);
+            dFree(title);
          }
       }
    }
@@ -1306,7 +1275,7 @@ static int Bmsrv_modify_update(SockHandler *sh, char *url)
  * Parse an "add section" request, and update the bm file.
  * Return code: { 0:OK, 1:Abort }
  */
-static int Bmsrv_modify_add_section(SockHandler *sh, char *url)
+static int Bmsrv_modify_add_section(char *url)
 {
    char *p, *title = NULL;
 
@@ -1314,7 +1283,7 @@ static int Bmsrv_modify_add_section(SockHandler *sh, char *url)
 
    /* get new section's title */
    if ((p = strstr(url, "&title="))) {
-      title = g_strdup (p + 7);
+      title = dStrdup (p + 7);
       if ((p = strchr(title, '&')))
          *p = 0;
       Unencode_str(title);
@@ -1322,7 +1291,7 @@ static int Bmsrv_modify_add_section(SockHandler *sh, char *url)
       return 1;
 
    Bms_sec_add(title);
-   g_free(title);
+   dFree(title);
 
    /* Write new bookmarks file */
    Bms_save();
@@ -1334,11 +1303,11 @@ static int Bmsrv_modify_add_section(SockHandler *sh, char *url)
  * Parse an "add url" request, and update the bm file.
  * Return code: { 0:OK, 1:Abort }
  */
-static int Bmsrv_modify_add_url(SockHandler *sh, char *s_url)
+static int Bmsrv_modify_add_url(Dsh *sh, char *s_url)
 {
    char *p, *q, *title, *u_title, *url;
    int i;
-   static gint section = 0;
+   static int section = 0;
 
    /* bookmarks were loaded before */
 
@@ -1356,10 +1325,10 @@ static int Bmsrv_modify_add_url(SockHandler *sh, char *s_url)
        !(q = strstr(s_url, "&url=")))
       return 1;
 
-   title = g_strdup (p + 7);
+   title = dStrdup (p + 7);
    if ((p = strchr(title, '&')))
       *p = 0;
-   url = g_strdup (q + 5);
+   url = dStrdup (q + 5);
    if ((p = strchr(url, '&')))
       *p = 0;
    if (strlen(title) && strlen(url)) {
@@ -1367,13 +1336,13 @@ static int Bmsrv_modify_add_url(SockHandler *sh, char *s_url)
       Unencode_str(url);
       u_title = Unescape_html_str(title);
       Bms_add(section, url, u_title);
-      g_free(u_title);
+      dFree(u_title);
    }
-   g_free(title);
-   g_free(url);
+   dFree(title);
+   dFree(url);
    section = 0;
 
-   /* todo: we should send an "Bookmark added" message, but the
+   /* TODO: we should send an "Bookmark added" message, but the
       msg-after-HTML functionallity is still pending, not hard though. */
 
    /* Write new bookmarks file */
@@ -1387,7 +1356,7 @@ static int Bmsrv_modify_add_url(SockHandler *sh, char *s_url)
  * when it's wrong.
  * Return code: { 0:OK, 2:Close }
  */
-static int Bmsrv_check_modify_request(SockHandler *sh, char *url)
+static int Bmsrv_check_modify_request(Dsh *sh, char *url)
 {
    char *p, *msg;
    int n_sec, n_url;
@@ -1452,20 +1421,20 @@ static int Bmsrv_check_modify_request(SockHandler *sh, char *url)
  * Parse a and process a modify request.
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_process_modify_request(SockHandler *sh, char *url)
+static int Bmsrv_process_modify_request(Dsh *sh, char *url)
 {
    /* check the provided parameters */
    if (Bmsrv_check_modify_request(sh, url) != 0)
       return 2;
 
    if (strstr(url, "operation=delete&")) {
-      if (Bmsrv_modify_delete(sh, url) == 1)
+      if (Bmsrv_modify_delete(url) == 1)
          return 1;
       if (Bmsrv_send_reload_request(sh, "dpi:/bm/modify") == 1)
          return 1;
 
    } else if (strstr(url, "operation=move&")) {
-      if (Bmsrv_modify_move(sh, url) == 1)
+      if (Bmsrv_modify_move(url) == 1)
          return 1;
       if (Bmsrv_send_reload_request(sh, "dpi:/bm/modify") == 1)
          return 1;
@@ -1478,7 +1447,7 @@ static int Bmsrv_process_modify_request(SockHandler *sh, char *url)
          return 1;
 
    } else if (strstr(url, "operation=modify2&")) {
-      if (Bmsrv_modify_update(sh, url) == 1)
+      if (Bmsrv_modify_update(url) == 1)
          return 1;
       if (Bmsrv_send_reload_request(sh, "dpi:/bm/modify") == 1)
          return 1;
@@ -1490,7 +1459,7 @@ static int Bmsrv_process_modify_request(SockHandler *sh, char *url)
          return 1;
 
    } else if (strstr(url, "operation=add_section&")) {
-      if (Bmsrv_modify_add_section(sh, url) == 1)
+      if (Bmsrv_modify_add_section(url) == 1)
          return 1;
       if (Bmsrv_send_reload_request(sh, "dpi:/bm/modify") == 1)
          return 1;
@@ -1518,69 +1487,65 @@ static int Bmsrv_process_modify_request(SockHandler *sh, char *url)
 /*
  * Send the current bookmarks page (in HTML)
  */
-static int send_bm_page(SockHandler *sh)
+static int send_bm_page(Dsh *sh)
 {
-   static GString *gstr = NULL;
-   gchar *l_title;
-   GSList *list1, *list2;
+   static Dstr *dstr = NULL;
+   char *l_title;
    BmSec *sec_node;
    BmRec *bm_node;
+   int i, j;
 
-   if (!gstr)
-      gstr = g_string_new("");
+   if (!dstr)
+      dstr = dStr_new("");
 
-   if (sock_handler_write_str(sh, mainpage_header, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, mainpage_header))
       return 1;
 
    /* write sections header */
-   if (sock_handler_write_str(sh, mainpage_sections_header, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, mainpage_sections_header))
       return 1;
    /* write sections */
-   for (list1 = B_secs; list1; list1 = list1->next) {
-      sec_node = list1->data;
-      g_string_sprintf(gstr, mainpage_sections_item,
-                       sec_node->section, sec_node->title);
-      if (sock_handler_write_str(sh, gstr->str, 0))
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
+      dStr_sprintf(dstr, mainpage_sections_item,
+                   sec_node->section, sec_node->title);
+      if (a_Dpip_dsh_write_str(sh, 0, dstr->str))
          return 1;
    }
    /* write sections footer */
-   if (sock_handler_write_str(sh, mainpage_sections_footer, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, mainpage_sections_footer))
       return 1;
 
    /* send page middle */
-   if (sock_handler_write_str(sh, mainpage_middle1, 0))
+   if (a_Dpip_dsh_write_str(sh, 0, mainpage_middle1))
       return 1;
 
    /* send bookmark cards */
-   for (list1 = B_secs; list1; list1 = list1->next) {
-      sec_node = list1->data;
-
+   for (i = 0; (sec_node = dList_nth_data(B_secs, i)); ++i) {
       /* send card header */
       l_title = make_one_line_str(sec_node->title);
-      g_string_sprintf(gstr, mainpage_section_card_header,
-                       sec_node->section, l_title);
-      g_free(l_title);
-      if (sock_handler_write_str(sh, gstr->str, 0))
+      dStr_sprintf(dstr, mainpage_section_card_header,
+                   sec_node->section, l_title);
+      dFree(l_title);
+      if (a_Dpip_dsh_write_str(sh, 0, dstr->str))
          return 1;
 
       /* send section's bookmarks */
-      for (list2 = B_bms; list2; list2 = list2->next) {
-         bm_node = list2->data;
+      for (j = 0; (bm_node = dList_nth_data(B_bms, j)); ++j) {
          if (bm_node->section == sec_node->section) {
-            g_string_sprintf(gstr, mainpage_section_card_item,
-                             bm_node->url, bm_node->title);
-            if (sock_handler_write_str(sh, gstr->str, 0))
+            dStr_sprintf(dstr, mainpage_section_card_item,
+                         bm_node->url, bm_node->title);
+            if (a_Dpip_dsh_write_str(sh, 0, dstr->str))
                return 1;
          }
       }
 
       /* send card footer */
-      if (sock_handler_write_str(sh, mainpage_section_card_footer, 0))
+      if (a_Dpip_dsh_write_str(sh, 0, mainpage_section_card_footer))
          return 1;
    }
 
    /* finish page */
-   if (sock_handler_write_str(sh, mainpage_footer, 1))
+   if (a_Dpip_dsh_write_str(sh, 1, mainpage_footer))
       return 1;
 
    return 0;
@@ -1591,13 +1556,14 @@ static int send_bm_page(SockHandler *sh)
 
 /*
  * Parse a data stream (dpi protocol)
- * Note: Buf is a zero terminated string
+ * Note: Buf is a dpip token (zero terminated string)
  * Return code: { 0:OK, 1:Abort, 2:Close }
  */
-static int Bmsrv_parse_buf(SockHandler *sh, char *Buf, size_t BufSize)
+static int Bmsrv_parse_token(Dsh *sh, char *Buf)
 {
    static char *msg1=NULL, *msg2=NULL, *msg3=NULL;
-   char *p, *cmd, *d_cmd, *url, *title, *msg;
+   char *cmd, *d_cmd, *url, *title, *msg;
+   size_t BufSize;
    int st;
 
    if (!msg1) {
@@ -1607,31 +1573,31 @@ static int Bmsrv_parse_buf(SockHandler *sh, char *Buf, size_t BufSize)
      msg3 = a_Dpip_build_cmd("cmd=%s msg=%s", "chat", "Ok, send it");
    }
 
-   if (!(p = strchr(Buf, '>'))) {
-      /* Haven't got a full tag */
-      g_print("Haven't got a full tag!\n");
+   if (sh->mode & DPIP_RAW) {
+      MSG("ERROR: Unhandled DPIP_RAW mode!\n");
       return 1;
    }
 
-   cmd = a_Dpip_get_attr(Buf, BufSize, "cmd");
+   BufSize = strlen(Buf);
+   cmd = a_Dpip_get_attr_l(Buf, BufSize, "cmd");
 
    if (cmd && strcmp(cmd, "chat") == 0) {
-      g_free(cmd);
-      msg = a_Dpip_get_attr(Buf, BufSize, "msg");
+      dFree(cmd);
+      msg = a_Dpip_get_attr_l(Buf, BufSize, "msg");
       if (*msg == 'H') {
          /* "Hi server" */
-         if (sock_handler_write_str(sh, msg1, 1))
+         if (a_Dpip_dsh_write_str(sh, 1, msg1))
             return 1;
       } else if (*msg == 'I') {
          /* "I want to set abookmark" */
-         if (sock_handler_write_str(sh, msg2, 1))
+         if (a_Dpip_dsh_write_str(sh, 1, msg2))
             return 1;
       } else if (*msg == 'S') {
          /* "Sure" */
-         if (sock_handler_write_str(sh, msg3, 1))
+         if (a_Dpip_dsh_write_str(sh, 1, msg3))
             return 1;
       }
-      g_free(msg);
+      dFree(msg);
       return 0;
    }
 
@@ -1639,46 +1605,49 @@ static int Bmsrv_parse_buf(SockHandler *sh, char *Buf, size_t BufSize)
    Bms_cond_load();
 
    if (cmd && strcmp(cmd, "DpiBye") == 0) {
-      g_print("bookmarks dpi (pid %d): Got DpiBye.\n", (gint)getpid());
+      MSG("(pid %d): Got DpiBye.\n", (int)getpid());
       exit(0);
 
    } else if (cmd && strcmp(cmd, "add_bookmark") == 0) {
-      g_free(cmd);
-      url = a_Dpip_get_attr(Buf, BufSize, "url");
-      title = a_Dpip_get_attr(Buf, BufSize, "title");
+      dFree(cmd);
+      url = a_Dpip_get_attr_l(Buf, BufSize, "url");
+      title = a_Dpip_get_attr_l(Buf, BufSize, "title");
       if (strlen(title) == 0) {
-         g_free(title);
-         title = g_strdup("(Untitled)");
+         dFree(title);
+         title = dStrdup("(Untitled)");
       }
       if (url && title)
          Bmsrv_add_bm(sh, url, title);
-      g_free(url);
-      g_free(title);
+      dFree(url);
+      dFree(title);
       return 2;
 
    } else if (cmd && strcmp(cmd, "open_url") == 0) {
-      g_free(cmd);
-      url = a_Dpip_get_attr(Buf, BufSize, "url");
+      dFree(cmd);
+      url = a_Dpip_get_attr_l(Buf, BufSize, "url");
 
       if (strcmp(url, "dpi:/bm/modify") == 0) {
          st = Bmsrv_send_modify_answer(sh, url);
+         dFree(url);
          return st;
 
       } else if (strncmp(url, "dpi:/bm/modify?", 15) == 0) {
          /* process request */
          st = Bmsrv_process_modify_request(sh, url);
+         dFree(url);
          return st;
       }
 
 
       d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page", url);
-      st = sock_handler_write_str(sh, d_cmd, 1);
-      g_free(d_cmd);
+      dFree(url);
+      st = a_Dpip_dsh_write_str(sh, 1, d_cmd);
+      dFree(d_cmd);
       if (st != 0)
          return 1;
 
       /* Send HTTP header */
-      if (sock_handler_write(sh, Header, strlen(Header), 1) != 0) {
+      if (a_Dpip_dsh_write_str(sh, 1, Header) != 0) {
          return 1;
       }
 
@@ -1686,8 +1655,9 @@ static int Bmsrv_parse_buf(SockHandler *sh, char *Buf, size_t BufSize)
       if (st != 0) {
          char *err =
             DOCTYPE
-            "<HTML><body> Error on the bookmarks server...</body></html>";
-         if (sock_handler_write(sh, err, strlen(err), 1) != 0) {
+            "<HTML><body id='dillo_bm'> Error on the bookmarks server..."
+            "      </body></html>";
+         if (a_Dpip_dsh_write_str(sh, 1, err) != 0) {
             return 1;
          }
       }
@@ -1719,13 +1689,12 @@ static void termination_handler(int signum)
 /*
  * -- MAIN -------------------------------------------------------------------
  */
-int main (void) {
+int main(void) {
    struct sockaddr_un spun;
-   int temp_sock_descriptor;
-   int address_size;
-   char *buf;
-   int code;
-   SockHandler *sh;
+   int sock_fd, code;
+   socklen_t address_size;
+   char *tok;
+   Dsh *sh;
 
    /* Arrange the cleanup function for terminations via exit() */
    atexit(cleanup);
@@ -1738,38 +1707,53 @@ int main (void) {
    if (signal (SIGTERM, termination_handler) == SIG_IGN)
      signal (SIGTERM, SIG_IGN);
 
-   BmFile = g_strconcat(g_get_home_dir(), "/", ".dillo/bm.txt", NULL);
+   /* We may receive SIGPIPE (e.g. socket is closed early by our client) */
+   signal(SIGPIPE, SIG_IGN);
 
-   g_print("bookmarks.dpi (v.13): accepting connections...\n");
-
+   /* Initialize local data */
+   B_bms = dList_new(512);
+   B_secs = dList_new(32);
+   BmFile = dStrconcat(dGethomedir(), "/.dillo/bm.txt", NULL);
    /* some OSes may need this... */
    address_size = sizeof(struct sockaddr_un);
 
+   MSG("(v.13): accepting connections...\n");
+
    while (1) {
-      temp_sock_descriptor =
-         accept(STDIN_FILENO, (struct sockaddr *)&spun, &address_size);
-      if (temp_sock_descriptor == -1) {
+      sock_fd = accept(STDIN_FILENO, (struct sockaddr *)&spun, &address_size);
+      if (sock_fd == -1) {
          perror("[accept]");
          exit(1);
       }
 
-      /* create the SockHandler structure */
-      sh = sock_handler_new(temp_sock_descriptor,temp_sock_descriptor,8*1024);
+      /* create the Dsh structure */
+      sh = a_Dpip_dsh_new(sock_fd, sock_fd, 8*1024);
+
+      /* Authenticate our client... */
+      if (!(tok = a_Dpip_dsh_read_token(sh, 1)) ||
+          a_Dpip_check_auth(tok) < 0) {
+         MSG("can't authenticate request: %s\n", dStrerror(errno));
+         a_Dpip_dsh_close(sh);
+         exit(1);
+      }
+      dFree(tok);
 
       while (1) {
          code = 1;
-         if ((buf = sock_handler_read(sh)) != NULL) {
+         if ((tok = a_Dpip_dsh_read_token(sh, 1)) != NULL) {
             /* Let's see what we fished... */
-            code = Bmsrv_parse_buf(sh, buf, strlen(buf));
+            code = Bmsrv_parse_token(sh, tok);
          }
-         if (code == 1)
-            exit(1);
-         else if (code == 2)
+         dFree(tok);
+
+         if (code != 0) {
+            /* socket is not operative (e.g. closed by client) */
             break;
+         }
       }
 
-      sock_handler_close(sh);
-      sock_handler_free(sh);
+      a_Dpip_dsh_close(sh);
+      a_Dpip_dsh_free(sh);
 
    }/*while*/
 }

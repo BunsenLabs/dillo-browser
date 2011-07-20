@@ -15,13 +15,13 @@
  *  list size --to make it faster)
  */
 #define a_List_resize(list,num_items,alloc_step) \
-   if ( !list ) { \
-      list = g_malloc(alloc_step * sizeof((*list))); \
+   if (!list) { \
+      list = dMalloc(alloc_step * sizeof((*list))); \
    } \
-   if ( num_items >= alloc_step ){ \
+   if (num_items >= alloc_step){ \
       while ( num_items >= alloc_step ) \
          alloc_step <<= 1; \
-      list = g_realloc(list, alloc_step * sizeof((*list))); \
+      list = dRealloc(list, alloc_step * sizeof((*list))); \
    }
 
 
@@ -41,7 +41,7 @@
  * ==> We preserve relative position, but not the element index <==
  */
 #define a_List_remove(list, item, num_items) \
-   if ( list && item < num_items ) { \
+   if (list && item < num_items) { \
       list[item] = list[--num_items]; \
    }
 

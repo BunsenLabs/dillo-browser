@@ -1,23 +1,28 @@
-#ifndef __MISC_H__
-#define __MISC_H__
-#include <stdlib.h>
+#ifndef __DILLO_MISC_H__
+#define __DILLO_MISC_H__
 
-gchar *a_Misc_prepend_user_home(const char *file);
-gchar *a_Misc_escape_chars(const gchar *str, gchar *esc_set);
-gchar *a_Misc_stristr(char *src, char *str);
-gchar *a_Misc_expand_tabs(const char *str);
-gchar *a_Misc_strsep(char **orig, const char *delim);
-#define d_strsep a_Misc_strsep
-gint *a_Misc_strsplitpos(const gchar *str, const gchar *delim);
-gint *a_Misc_strsplitposdup(gint *pos);
-gint a_Misc_get_content_type_from_data(void *Data, size_t Size,
-                                       const char **PT);
+#include <stddef.h>     /* for size_t */
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
+
+char *a_Misc_escape_chars(const char *str, const char *esc_set);
+int a_Misc_expand_tabs(char **start, char *end, char *buf, int buflen);
+int a_Misc_get_content_type_from_data(void *Data, size_t Size,const char **PT);
 int a_Misc_content_type_check(const char *EntryType, const char *DetectedType);
-gint a_Misc_parse_geometry(gchar *geom, gint *x, gint *y, gint *w, gint *h);
-gchar *a_Misc_encode_base64(const gchar *in);
+void a_Misc_parse_content_type(const char *str, char **major, char **minor,
+                               char **charset);
+int a_Misc_content_type_cmp(const char* ct1, const char *ct2);
+int a_Misc_parse_geometry(char *geom, int *x, int *y, int *w, int *h);
+char *a_Misc_encode_base64(const char *in);
+Dstr *a_Misc_file2dstr(const char *filename);
 
-/* Return a NULL-terminated string containing the characters from p1 to p2. */
-#define a_Misc_strpdup(s, p1, p2) g_strndup((s) + (p1), (p2) - (p1))
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
-#endif /* __MISC_H__ */
+#endif /* __DILLO_MISC_H__ */
 

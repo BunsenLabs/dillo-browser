@@ -1,14 +1,19 @@
 #ifndef __BOOKMARK_H__
 #define __BOOKMARK_H__
 
-#include "browser.h"
+#include "bw.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
 
-void a_Bookmarks_init(void);
-void a_Bookmarks_add(GtkWidget *widget, gpointer client_data);
-void a_Bookmarks_show(BrowserWindow *bw);
+void a_Bookmarks_add(BrowserWindow *bw, const DilloUrl *url);
 
-/* todo: this is for testing purposes */
+/* TODO: this is for testing purposes */
 void a_Bookmarks_chat_add(BrowserWindow *Bw, char *Cmd, char *answer);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif /* __BOOKMARK_H__ */
