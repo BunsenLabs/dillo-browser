@@ -6,11 +6,6 @@ doc/Cache.txt
 doc/Cookies.txt
 doc/Dillo.txt
 doc/Dw.txt
-doc/DwImage.txt
-doc/DwPage.txt
-doc/DwStyle.txt
-doc/DwTable.txt
-doc/DwWidget.txt
 doc/HtmlParser.txt
 doc/IO.txt
 doc/Images.txt
