@@ -22,7 +22,7 @@ endif
 configure: config.status
 config.status: patch-stamp
 	dh_testdir
-	dh_autotools-dev_updateconfig
+	./autogen.sh
 	./configure $(CONFFLAGS) \
 				--prefix=/usr \
 				--sysconfdir=/etc \
@@ -50,7 +50,6 @@ clean-patched:
 	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`
 	-rm -f `find . -name "*.gmo"` src/dillo dpid/dpid config/dillocfg
 	[ ! -f Makefile ] || $(MAKE) clean
-	dh_autotools-dev_restoreconfig
 	dh_clean
 
 install: build
