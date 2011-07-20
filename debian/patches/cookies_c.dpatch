@@ -2,7 +2,7 @@
 ## cookies_c.dpatch by Devid Filoni <d.filoni@techemail.com>
 ##
 ## All lines beginning with `## DP:' are a description of the patch.
-## DP: No description.
+## DP: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=326950
 
 @DPATCH@
 diff -urNad dillo-0.8.6~/src/cookies.c dillo-0.8.6/src/cookies.c
