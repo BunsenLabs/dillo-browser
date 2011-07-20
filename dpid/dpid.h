@@ -5,42 +5,47 @@
 #ifndef DPID_H
 #define DPID_H
 
-#include <assert.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <string.h>
 #include <sys/socket.h>
-#include <sys/time.h>
+#include <sys/select.h>   /* for fd_set */
 #include <sys/un.h>
-#include <errno.h>
-#include <glib.h>
+#include <signal.h>       /* for sig_atomic_t */
+#include <netinet/in.h>   /* for ntohl, IPPORT_USERRESERVED and stuff */
+
+#include "d_size.h"
+
+/* FreeBSD 6.4 doesn't have it */
+#ifndef IPPORT_USERRESERVED
+ #define IPPORT_USERRESERVED 5000
+#endif
 
 #define PATH_LEN 50
 #define CMDLEN 20
 #define MSGLEN 50
-/*! \todo: Should read this from dillorc */
+#define DPID_BASE_PORT (IPPORT_USERRESERVED + 20)
+
+/*! \TODO: Should read this from dillorc */
 #define SRS_NAME "dpid.srs"
 char *srs_name;
 
-/*! dpid service request socket */
-int srs;
+/*! dpid's service request socket file descriptor */
+int srs_fd;
 
 /*! plugin state information
  */
 struct dp {
    char *id;
    char *path;
-   char *sockpath;
-   int socket;
-   struct sockaddr_un sa;
+   int sock_fd;
+   int port;
    pid_t pid;
    int filter;
+};
+
+/*! bind dpi with service
+ */
+struct service {
+   char *name;
+   int dp_index;
 };
 
 /*! Number of available plugins */
@@ -52,6 +57,9 @@ int numsocks;
 /*! State information for each plugin. */
 struct dp *dpi_attr_list;
 
+/*! service served for each plugin  */
+Dlist *services_list;
+
 /*! Set of sockets watched for connections */
 fd_set sock_set;
 
@@ -60,15 +68,15 @@ extern volatile sig_atomic_t caught_sigchld;
 
 void rm_dpi_sockets(struct dp *dpi_attr_list, int numdpis);
 
-int rm_inactive_dpi_sockets(struct dp *dpi_attr_list, int numdpis);
-
-void cleanup(char *socket_dir);
+void cleanup();
 
 void free_dpi_attr(struct dp *dpi_attr);
 
 void free_plugin_list(struct dp **dpi_attr_list_ptr, int numdpis);
 
-enum file_type get_file_type(gchar *file_name);
+void free_services_list(Dlist *s_list);
+
+enum file_type get_file_type(char *file_name);
 
 int get_dpi_attr(char *dpi_dir, char *service, struct dp *dpi_attr);
 
@@ -76,11 +84,13 @@ int register_service(struct dp *dpi_attr, char *service);
 
 int register_all(struct dp **attlist);
 
-int init_srs_socket(char *sockdir);
+int fill_services_list(struct dp *attlist, int numdpis, Dlist **services_list);
 
-int init_dpi_socket(struct dp *dpi_attr, char *sockdir);
+int init_ids_srs_socket();
 
-int init_all_dpi_sockets(struct dp *dpi_attr_list, char *sockdir);
+int init_dpi_socket(struct dp *dpi_attr);
+
+int init_all_dpi_sockets(struct dp *dpi_attr_list);
 
 void dpi_sigchld(int sig);
 
@@ -88,14 +98,18 @@ void handle_sigchld(void);
 
 void est_dpi_sigchld(void);
 
+void est_dpi_terminator(void);
+
 void stop_active_dpis(struct dp *dpi_attr_list, int numdpis);
 
 void ignore_dpi_sockets(struct dp *dpi_attr_list, int numdpis);
 
-int register_all_cmd(char *sockdir);
+int register_all_cmd();
 
 char *get_message(int sock, char *dpi_tag);
 
-void send_sockpath(gint sock, gchar * dpi_tag, struct dp *dpi_attr_list);
+int service_match(const struct service *A, const char *B);
+
+void send_sockport(int sock_fd, char * dpi_tag, struct dp *dpi_attr_list);
 
 #endif

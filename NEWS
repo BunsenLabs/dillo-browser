@@ -2,23 +2,18 @@
 NEWS
 ----
 
+Nov 2000:
+
+  Introduced a new design layer between the IO and the Dw.
+
 March 2001:
 
   Finally the new dillo widget is ready! (dillo >= 0.4.0).
   0.4.0 is able to cope with low resolution depths.
 
-
-Nov 2000:
-
-  Introduced a new design layer between the IO and the Dw.
-
-  We'll try to focus on table rendering.
-
-
 Apr 2002:
 
   We moved to:  http://dillo.cipsga.org.br/
-
 
 Dec 2002
 
@@ -28,8 +23,11 @@ Jun 2003
 
   http://www.dillo.org/     (hosted at the wearlab!)
 
+Sep 2007
+
+  The new FLTK2-based dillo code is released! (under GPL3)
 
   Jorge.-
-  jcid@inf.utfsm.cl
+  jcid@dillo.org
   Project maintainer, core developer, patcher, you name it! :-)
 

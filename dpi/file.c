@@ -1,11 +1,11 @@
 /*
  * File: file.c :)
  *
- * Copyright (C) 2000 - 2004 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright (C) 2000-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
@@ -15,14 +15,13 @@
  * With new HTML layout.
  */
 
-#include <pthread.h>
-
 #include <ctype.h>           /* for tolower */
 #include <errno.h>           /* for errno */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -32,22 +31,42 @@
 #include <fcntl.h>
 #include <time.h>
 #include <signal.h>
-#include <glib.h>
+#include <netinet/in.h>
 
 #include "../dpip/dpip.h"
 #include "dpiutil.h"
+#include "d_size.h"
+
+/*
+ * Debugging macros
+ */
+#define _MSG(...)
+#define MSG(...)  printf("[file dpi]: " __VA_ARGS__)
+#define _MSG_RAW(...)
+#define MSG_RAW(...)  printf(__VA_ARGS__)
+
 
 #define MAXNAMESIZE 30
 #define HIDE_DOTFILES TRUE
 
-#define _MSG(fmt...)
-#define MSG(fmt...)  g_print("[file dpi]: " fmt)
+/*
+ * Communication flags
+ */
+#define FILE_AUTH_OK     1     /* Authentication done */
+#define FILE_READ        2     /* Waiting data */
+#define FILE_WRITE       4     /* Sending data */
+#define FILE_DONE        8     /* Operation done */
+#define FILE_ERR        16     /* Operation error */
 
-enum {
-   FILE_OK,
-   FILE_NOT_FOUND,
-   FILE_NO_ACCESS
-};
+
+typedef enum {
+   st_start = 10,
+   st_dpip,
+   st_http,
+   st_content,
+   st_done,
+   st_err
+} FileState;
 
 typedef struct {
    char *full_path;
@@ -59,46 +78,44 @@ typedef struct {
 
 typedef struct {
    char *dirname;
-   GList *flist;       /* List of files and subdirectories (for sorting) */
+   Dlist *flist;       /* List of files and subdirectories (for sorting) */
 } DilloDir;
 
 typedef struct {
-   SockHandler *sh;
-   gint status;
-   gint old_style;
-   pthread_t thrID;
-   gint done;
+   Dsh *sh;
+   char *orig_url;
+   char *filename;
+   int file_fd;
+   off_t file_sz;
+   DilloDir *d_dir;
+   FileState state;
+   int err_code;
+   int flags;
+   int old_style;
 } ClientInfo;
 
 /*
  * Forward references
  */
 static const char *File_content_type(const char *filename);
-static gint File_get_file(ClientInfo *Client,
-                          const gchar *filename,
-                          struct stat *sb,
-                          const char *orig_url);
-static gint File_get_dir(ClientInfo *Client,
-                         const gchar *DirName,
-                         const char *orig_url);
 
 /*
  * Global variables
  */
-static volatile gint DPIBYE = 0;
-static volatile gint ThreadRunning = 0;
-static gint OLD_STYLE = 0;
+static int DPIBYE = 0;
+static int OLD_STYLE = 0;
 /* A list for the clients we are serving */
-static GList *Clients = NULL;
-/* a mutex for operations on clients */
-static pthread_mutex_t ClMut;
+static Dlist *Clients;
+/* Set of filedescriptors we're working on */
+fd_set read_set, write_set;
+
 
 /*
  * Close a file descriptor, but handling EINTR
  */
 static void File_close(int fd)
 {
-   while (close(fd) < 0 && errno == EINTR)
+   while (fd >= 0 && close(fd) < 0 && errno == EINTR)
       ;
 }
 
@@ -110,36 +127,36 @@ static void File_close(int fd)
  * 'Data' is a pointer to the first bytes of the raw data.
  * (this is based on a_Misc_get_content_type_from_data())
  */
-static const gchar *File_get_content_type_from_data(void *Data, size_t Size)
+static const char *File_get_content_type_from_data(void *Data, size_t Size)
 {
-   static const gchar *Types[] = {
+   static const char *Types[] = {
       "application/octet-stream",
       "text/html", "text/plain",
       "image/gif", "image/png", "image/jpeg",
    };
-   gint Type = 0;
-   gchar *p = Data;
+   int Type = 0;
+   char *p = Data;
    size_t i, non_ascci;
 
    _MSG("File_get_content_type_from_data:: Size = %d\n", Size);
 
    /* HTML try */
-   for (i = 0; i < Size && isspace(p[i]); ++i);
-   if ((Size - i >= 5  && !g_strncasecmp(p+i, "<html", 5)) ||
-       (Size - i >= 5  && !g_strncasecmp(p+i, "<head", 5)) ||
-       (Size - i >= 6  && !g_strncasecmp(p+i, "<title", 6)) ||
-       (Size - i >= 14 && !g_strncasecmp(p+i, "<!doctype html", 14)) ||
+   for (i = 0; i < Size && dIsspace(p[i]); ++i);
+   if ((Size - i >= 5  && !dStrncasecmp(p+i, "<html", 5)) ||
+       (Size - i >= 5  && !dStrncasecmp(p+i, "<head", 5)) ||
+       (Size - i >= 6  && !dStrncasecmp(p+i, "<title", 6)) ||
+       (Size - i >= 14 && !dStrncasecmp(p+i, "<!doctype html", 14)) ||
        /* this line is workaround for FTP through the Squid proxy */
-       (Size - i >= 17 && !g_strncasecmp(p+i, "<!-- HTML listing", 17))) {
+       (Size - i >= 17 && !dStrncasecmp(p+i, "<!-- HTML listing", 17))) {
 
       Type = 1;
 
    /* Images */
-   } else if (Size >= 4 && !g_strncasecmp(p, "GIF8", 4)) {
+   } else if (Size >= 4 && !dStrncasecmp(p, "GIF8", 4)) {
       Type = 3;
-   } else if (Size >= 4 && !g_strncasecmp(p, "\x89PNG", 4)) {
+   } else if (Size >= 4 && !dStrncasecmp(p, "\x89PNG", 4)) {
       Type = 4;
-   } else if (Size >= 2 && !g_strncasecmp(p, "\xff\xd8", 2)) {
+   } else if (Size >= 2 && !dStrncasecmp(p, "\xff\xd8", 2)) {
       /* JPEG has the first 2 bytes set to 0xffd8 in BigEndian - looking
        * at the character representation should be machine independent. */
       Type = 5;
@@ -149,9 +166,9 @@ static const gchar *File_get_content_type_from_data(void *Data, size_t Size)
       /* We'll assume "text/plain" if the set of chars above 127 is <= 10
        * in a 256-bytes sample.  Better heuristics are welcomed! :-) */
       non_ascci = 0;
-      Size = MIN (Size, 256);    
-      for (i = 0; i < Size; i++) 
-         if ((unsigned char) p[i] > 127)
+      Size = MIN (Size, 256);
+      for (i = 0; i < Size; i++)
+         if ((uchar_t) p[i] > 127)
             ++non_ascci;
       if (Size == 256) {
          Type = (non_ascci > 10) ? 0 : 2;
@@ -167,11 +184,8 @@ static const gchar *File_get_content_type_from_data(void *Data, size_t Size)
  * Compare two FileInfo pointers
  * This function is used for sorting directories
  */
-static gint File_comp(gconstpointer a, gconstpointer b)
+static int File_comp(const FileInfo *f1, const FileInfo *f2)
 {
-   FileInfo *f1 = (FileInfo *) a;
-   FileInfo *f2 = (FileInfo *) b;
-
    if (S_ISDIR(f1->mode)) {
       if (S_ISDIR(f2->mode)) {
          return strcmp(f1->filename, f2->filename);
@@ -200,12 +214,12 @@ static DilloDir *File_dillodir_new(char *dirname)
    char *fname;
    int dirname_len;
 
-   if ( !(dir = opendir(dirname)))
+   if (!(dir = opendir(dirname)))
       return NULL;
 
-   Ddir = g_new(DilloDir, 1);
-   Ddir->dirname = g_strdup(dirname);
-   Ddir->flist = NULL;
+   Ddir = dNew(DilloDir, 1);
+   Ddir->dirname = dStrdup(dirname);
+   Ddir->flist = dList_new(512);
 
    dirname_len = strlen(Ddir->dirname);
 
@@ -223,27 +237,26 @@ static DilloDir *File_dillodir_new(char *dirname)
             continue;
       }
 
-      fname = g_strdup_printf("%s/%s", Ddir->dirname, de->d_name);
-
+      fname = dStrconcat(Ddir->dirname, de->d_name, NULL);
       if (stat(fname, &sb) == -1) {
-         g_free(fname);
+         dFree(fname);
          continue;              /* ignore files we can't stat */
       }
 
-      finfo = g_new(FileInfo, 1);
+      finfo = dNew(FileInfo, 1);
       finfo->full_path = fname;
-      finfo->filename = fname + dirname_len + 1;
+      finfo->filename = fname + dirname_len;
       finfo->size = sb.st_size;
       finfo->mode = sb.st_mode;
       finfo->mtime = sb.st_mtime;
 
-      Ddir->flist = g_list_prepend(Ddir->flist, finfo);
+      dList_append(Ddir->flist, finfo);
    }
 
    closedir(dir);
 
    /* sort the entries */
-   Ddir->flist = g_list_sort(Ddir->flist, File_comp);
+   dList_sort(Ddir->flist, (dCompareFunc)File_comp);
 
    return Ddir;
 }
@@ -253,61 +266,64 @@ static DilloDir *File_dillodir_new(char *dirname)
  */
 static void File_dillodir_free(DilloDir *Ddir)
 {
-   GList *list;
+   int i;
+   FileInfo *finfo;
 
-   for (list = Ddir->flist; list; list = g_list_next(list)) {
-      FileInfo *finfo = list->data;
-      g_free(finfo->full_path);
-      g_free(finfo);
+   dReturn_if (Ddir == NULL);
+
+   for (i = 0; i < dList_length(Ddir->flist); ++i) {
+      finfo = dList_nth_data(Ddir->flist, i);
+      dFree(finfo->full_path);
+      dFree(finfo);
    }
 
-   g_list_free(Ddir->flist);
-   g_free(Ddir->dirname);
-   g_free(Ddir);
+   dList_free(Ddir->flist);
+   dFree(Ddir->dirname);
+   dFree(Ddir);
 }
 
 /*
  * Output the string for parent directory
  */
-static void File_print_parent_dir(ClientInfo *Client, const char *dirname)
+static void File_print_parent_dir(ClientInfo *client, const char *dirname)
 {
    if (strcmp(dirname, "/") != 0) {        /* Not the root dir */
       char *p, *parent, *HUparent, *Uparent;
 
-      parent = g_strdup(dirname);
+      parent = dStrdup(dirname);
       /* cut trailing slash */
       parent[strlen(parent) - 1] = '\0';
       /* make 'parent' have the parent dir path */
-      if ( (p = strrchr(parent, '/')) )
+      if ((p = strrchr(parent, '/')))
          *(p + 1) = '\0';
 
       Uparent = Escape_uri_str(parent, NULL);
       HUparent = Escape_html_str(Uparent);
-      sock_handler_printf(Client->sh, 0,
+      a_Dpip_dsh_printf(client->sh, 0,
          "<a href='file:%s'>Parent directory</a>", HUparent);
-      g_free(HUparent);
-      g_free(Uparent);
-      g_free(parent);
+      dFree(HUparent);
+      dFree(Uparent);
+      dFree(parent);
    }
 }
 
 /*
  * Given a timestamp, output an HTML-formatted date string.
  */
-static void File_print_mtime(ClientInfo *Client, time_t mtime)
+static void File_print_mtime(ClientInfo *client, time_t mtime)
 {
    char *ds = ctime(&mtime);
 
    /* Month, day and {hour or year} */
-   if (Client->old_style) {
-      sock_handler_printf(Client->sh, 0, " %.3s %.2s", ds + 4, ds + 8);
+   if (client->old_style) {
+      a_Dpip_dsh_printf(client->sh, 0, " %.3s %.2s", ds + 4, ds + 8);
       if (time(NULL) - mtime > 15811200) {
-         sock_handler_printf(Client->sh, 0, "  %.4s", ds + 20);
+         a_Dpip_dsh_printf(client->sh, 0, "  %.4s", ds + 20);
       } else {
-         sock_handler_printf(Client->sh, 0, " %.5s", ds + 11);
+         a_Dpip_dsh_printf(client->sh, 0, " %.5s", ds + 11);
       }
    } else {
-      sock_handler_printf(Client->sh, 0,
+      a_Dpip_dsh_printf(client->sh, 0,
          "<td>%.3s&nbsp;%.2s&nbsp;%.5s", ds + 4, ds + 8,
          /* (more than 6 months old) ? year : hour; */
          (time(NULL) - mtime > 15811200) ? ds + 20 : ds + 11);
@@ -317,10 +333,9 @@ static void File_print_mtime(ClientInfo *Client, time_t mtime)
 /*
  * Return a HTML-line from file info.
  */
-static void File_info2html(ClientInfo *Client,
-                           FileInfo *finfo, const char *dirname, gint n)
+static void File_info2html(ClientInfo *client, FileInfo *finfo, int n)
 {
-   gint size;
+   int size;
    char *sizeunits;
    char namebuf[MAXNAMESIZE + 1];
    char *Uref, *HUref, *Hname;
@@ -361,10 +376,10 @@ static void File_info2html(ClientInfo *Client,
    HUref = Escape_html_str(Uref);
    Hname = Escape_html_str(name);
 
-   if (Client->old_style) {
+   if (client->old_style) {
       char *dots = ".. .. .. .. .. .. .. .. .. .. .. .. .. .. .. .. ..";
-      gint ndots = MAXNAMESIZE - strlen(name);
-      sock_handler_printf(Client->sh, 0,
+      int ndots = MAXNAMESIZE - strlen(name);
+      a_Dpip_dsh_printf(client->sh, 0,
          "%s<a href='%s'>%s</a>"
          " %s"
          " %-11s%4d %-5s",
@@ -373,96 +388,106 @@ static void File_info2html(ClientInfo *Client,
          filecont, size, sizeunits);
 
    } else {
-      sock_handler_printf(Client->sh, 0,
+      a_Dpip_dsh_printf(client->sh, 0,
          "<tr align=center %s><td>%s<td align=left><a href='%s'>%s</a>"
          "<td>%s<td>%d&nbsp;%s",
          (n & 1) ? "bgcolor=#dcdcdc" : "",
          S_ISDIR (finfo->mode) ? ">" : " ", HUref, Hname,
          filecont, size, sizeunits);
    }
-   File_print_mtime(Client, finfo->mtime);
-   sock_handler_printf(Client->sh, 0, "\n");
+   File_print_mtime(client, finfo->mtime);
+   a_Dpip_dsh_write_str(client->sh, 0, "\n");
 
-   g_free(Hname);
-   g_free(HUref);
-   g_free(Uref);
+   dFree(Hname);
+   dFree(HUref);
+   dFree(Uref);
 }
 
 /*
- * Read a local directory and translate it to html.
+ * Send the HTML directory page in HTTP.
  */
-static void File_transfer_dir(ClientInfo *Client,
-                              DilloDir *Ddir, const char *orig_url)
+static void File_send_dir(ClientInfo *client)
 {
-   gint n;
-   GList *list;
+   int n;
    char *d_cmd, *Hdirname, *Udirname, *HUdirname;
+   DilloDir *Ddir = client->d_dir;
 
-   /* Send DPI header */
-   d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page", orig_url);
-   sock_handler_write_str(Client->sh, d_cmd, 1);
-   g_free(d_cmd);
+   if (client->state == st_start) {
+      /* Send DPI command */
+      d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page",
+                               client->orig_url);
+      a_Dpip_dsh_write_str(client->sh, 1, d_cmd);
+      dFree(d_cmd);
+      client->state = st_dpip;
 
-   /* Send page title */
-   Udirname = Escape_uri_str(Ddir->dirname, NULL);
-   HUdirname = Escape_html_str(Udirname);
-   Hdirname = Escape_html_str(Ddir->dirname);
+   } else if (client->state == st_dpip) {
+      /* send HTTP header and HTML top part */
 
-   sock_handler_printf(Client->sh, 0,
-      "Content-Type: text/html\n\n"
-      "<!DOCTYPE HTML PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN'>\n"
-      "<HTML>\n<HEAD>\n <BASE href='file:%s'>\n"
-      " <TITLE>file:%s</TITLE>\n</HEAD>\n"
-      "<BODY><H1>Directory listing of %s</H1>\n",
-      HUdirname, Hdirname, Hdirname);
-   g_free(Hdirname);
-   g_free(HUdirname);
-   g_free(Udirname);
+      /* Send page title */
+      Udirname = Escape_uri_str(Ddir->dirname, NULL);
+      HUdirname = Escape_html_str(Udirname);
+      Hdirname = Escape_html_str(Ddir->dirname);
 
-   if (Client->old_style) {
-      sock_handler_printf(Client->sh, 0, "<pre>\n");
-   }
+      a_Dpip_dsh_printf(client->sh, 0,
+         "HTTP/1.1 200 OK\r\n"
+         "Content-Type: text/html\r\n"
+         "\r\n"
+         "<!DOCTYPE HTML PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN'>\n"
+         "<HTML>\n<HEAD>\n <BASE href='file:%s'>\n"
+         " <TITLE>file:%s</TITLE>\n</HEAD>\n"
+         "<BODY><H1>Directory listing of %s</H1>\n",
+         HUdirname, Hdirname, Hdirname);
+      dFree(Hdirname);
+      dFree(HUdirname);
+      dFree(Udirname);
 
-   /* Output the parent directory */
-   File_print_parent_dir(Client, Ddir->dirname);
-
-   /* HTML style toggle */
-   sock_handler_printf(Client->sh, 0,
-      "&nbsp;&nbsp;<a href='dpi:/file/toggle'>%%</a>\n");
-
-   if (Ddir->flist) {
-      if (Client->old_style) {
-         sock_handler_printf(Client->sh, 0, "\n\n");
-      } else {
-         sock_handler_printf(Client->sh, 0,
-            "<br><br>\n"
-            "<table border=0 cellpadding=1 cellspacing=0"
-            " bgcolor=#E0E0E0 width=100%%>\n"
-            "<tr align=center>\n"
-            "<td>\n"
-            "<td width=60%%><b>Filename</b>"
-            "<td><b>Type</b>"
-            "<td><b>Size</b>"
-            "<td><b>Modified&nbsp;at</b>\n");
+      if (client->old_style) {
+         a_Dpip_dsh_write_str(client->sh, 0, "<pre>\n");
       }
-   } else {
-      sock_handler_printf(Client->sh, 0, "<br><br>Directory is empty...");
-   }
 
-   /* Output entries */
-   for (n = 0, list = Ddir->flist; list; list = g_list_next(list)) {
-      File_info2html(Client, list->data, Ddir->dirname, ++n);
-   }
+      /* Output the parent directory */
+      File_print_parent_dir(client, Ddir->dirname);
 
-   if (Ddir->flist) {
-      if (Client->old_style) {
-         sock_handler_printf(Client->sh, 0, "</pre>\n");
+      /* HTML style toggle */
+      a_Dpip_dsh_write_str(client->sh, 0,
+         "&nbsp;&nbsp;<a href='dpi:/file/toggle'>%</a>\n");
+
+      if (dList_length(Ddir->flist)) {
+         if (client->old_style) {
+            a_Dpip_dsh_write_str(client->sh, 0, "\n\n");
+         } else {
+            a_Dpip_dsh_write_str(client->sh, 0,
+               "<br><br>\n"
+               "<table border=0 cellpadding=1 cellspacing=0"
+               " bgcolor=#E0E0E0 width=100%>\n"
+               "<tr align=center>\n"
+               "<td>\n"
+               "<td width=60%><b>Filename</b>"
+               "<td><b>Type</b>"
+               "<td><b>Size</b>"
+               "<td><b>Modified&nbsp;at</b>\n");
+         }
       } else {
-         sock_handler_printf(Client->sh, 0, "</table>\n");
+         a_Dpip_dsh_write_str(client->sh, 0, "<br><br>Directory is empty...");
       }
-   }
+      client->state = st_http;
 
-   sock_handler_printf(Client->sh, 0, "</BODY></HTML>\n");
+   } else if (client->state == st_http) {
+      /* send directories as HTML contents */
+      for (n = 0; n < dList_length(Ddir->flist); ++n) {
+         File_info2html(client, dList_nth_data(Ddir->flist,n), n+1);
+      }
+
+      if (client->old_style) {
+         a_Dpip_dsh_write_str(client->sh, 0, "</pre>\n");
+      } else if (dList_length(Ddir->flist)) {
+         a_Dpip_dsh_write_str(client->sh, 0, "</table>\n");
+      }
+
+      a_Dpip_dsh_write_str(client->sh, 1, "</BODY></HTML>\n");
+      client->state = st_content;
+      client->flags |= FILE_DONE;
+   }
 }
 
 /*
@@ -472,22 +497,24 @@ static const char *File_ext(const char *filename)
 {
    char *e;
 
-   if ( !(e = strrchr(filename, '.')) )
+   if (!(e = strrchr(filename, '.')))
       return NULL;
 
    e++;
 
-   if (!strcasecmp(e, "gif")) {
+   if (!dStrcasecmp(e, "gif")) {
       return "image/gif";
-   } else if (!strcasecmp(e, "jpg") ||
-              !strcasecmp(e, "jpeg")) {
+   } else if (!dStrcasecmp(e, "jpg") ||
+              !dStrcasecmp(e, "jpeg")) {
       return "image/jpeg";
-   } else if (!strcasecmp(e, "png")) {
+   } else if (!dStrcasecmp(e, "png")) {
       return "image/png";
-   } else if (!strcasecmp(e, "html") ||
-              !strcasecmp(e, "htm") ||
-              !strcasecmp(e, "shtml")) {
+   } else if (!dStrcasecmp(e, "html") ||
+              !dStrcasecmp(e, "htm") ||
+              !dStrcasecmp(e, "shtml")) {
       return "text/html";
+   } else if (!dStrcasecmp(e, "txt")) {
+      return "text/plain";
    } else {
       return NULL;
    }
@@ -499,10 +526,10 @@ static const char *File_ext(const char *filename)
  */
 static const char *File_content_type(const char *filename)
 {
-   gint fd;
+   int fd;
    struct stat sb;
-   const gchar *ct;
-   gchar buf[256];
+   const char *ct;
+   char buf[256];
    ssize_t buf_size;
 
    if (!(ct = File_ext(filename))) {
@@ -518,138 +545,239 @@ static const char *File_content_type(const char *filename)
          File_close(fd);
       }
    }
-
+   _MSG("File_content_type: name=%s ct=%s\n", filename, ct);
    return ct;
+}
+
+/*
+ * Send an error page
+ */
+static void File_prepare_send_error_page(ClientInfo *client, int res,
+                                         const char *orig_url)
+{
+   client->state = st_err;
+   client->err_code = res;
+   client->orig_url = dStrdup(orig_url);
+   client->flags &= ~FILE_READ;
+   client->flags |= FILE_WRITE;
+}
+
+/*
+ * Send an error page
+ */
+static void File_send_error_page(ClientInfo *client)
+{
+   const char *status;
+   char *d_cmd;
+   Dstr *body = dStr_sized_new(128);
+
+   if (client->err_code == EACCES) {
+      status = "403 Forbidden";
+   } else if (client->err_code == ENOENT) {
+      status = "404 Not Found";
+   } else {
+      /* good enough */
+      status = "500 Internal Server Error";
+   }
+   dStr_append(body, status);
+   dStr_append(body, "\n");
+   dStr_append(body, dStrerror(client->err_code));
+
+   /* Send DPI command */
+   d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page",
+                            client->orig_url);
+   a_Dpip_dsh_write_str(client->sh, 0, d_cmd);
+   dFree(d_cmd);
+
+   a_Dpip_dsh_printf(client->sh, 0,
+                     "HTTP/1.1 %s\r\n"
+                     "Content-Type: text/plain\r\n"
+                     "Content-Length: %d\r\n"
+                     "\r\n"
+                     "%s",
+                     status, body->len, body->str);
+   dStr_free(body, TRUE);
+
+   client->flags |= FILE_DONE;
+}
+
+/*
+ * Scan the directory, sort and prepare to send it enclosed in HTTP.
+ */
+static int File_prepare_send_dir(ClientInfo *client,
+                                 const char *DirName, const char *orig_url)
+{
+   Dstr *ds_dirname;
+   DilloDir *Ddir;
+
+   /* Let's make sure this directory url has a trailing slash */
+   ds_dirname = dStr_new(DirName);
+   if (ds_dirname->str[ds_dirname->len - 1] != '/')
+      dStr_append(ds_dirname, "/");
+
+   /* Let's get a structure ready for transfer */
+   Ddir = File_dillodir_new(ds_dirname->str);
+   dStr_free(ds_dirname, TRUE);
+   if (Ddir) {
+      /* looks ok, set things accordingly */
+      client->orig_url = dStrdup(orig_url);
+      client->d_dir = Ddir;
+      client->state = st_start;
+      client->flags &= ~FILE_READ;
+      client->flags |= FILE_WRITE;
+      return 0;
+   } else
+      return EACCES;
+}
+
+/*
+ * Prepare to send HTTP headers and then the file itself.
+ */
+static int File_prepare_send_file(ClientInfo *client,
+                                  const char *filename,
+                                  const char *orig_url)
+{
+   int fd, res = -1;
+   struct stat sb;
+
+   if (stat(filename, &sb) != 0) {
+      /* prepare a file-not-found error */
+      res = ENOENT;
+   } else if ((fd = open(filename, O_RDONLY | O_NONBLOCK)) < 0) {
+      /* prepare an error message */
+      res = errno;
+   } else {
+      /* looks ok, set things accordingly */
+      client->file_fd = fd;
+      client->file_sz = sb.st_size;
+      client->d_dir = NULL;
+      client->state = st_start;
+      client->filename = dStrdup(filename);
+      client->orig_url = dStrdup(orig_url);
+      client->flags &= ~FILE_READ;
+      client->flags |= FILE_WRITE;
+      res = 0;
+   }
+   return res;
 }
 
 /*
  * Try to stat the file and determine if it's readable.
  */
-static void File_get(ClientInfo *Client, const char *filename,
+static void File_get(ClientInfo *client, const char *filename,
                      const char *orig_url)
 {
    int res;
    struct stat sb;
-   char *msg = NULL, *d_cmd;
 
    if (stat(filename, &sb) != 0) {
       /* stat failed, prepare a file-not-found error. */
-      res = FILE_NOT_FOUND;
+      res = ENOENT;
    } else if (S_ISDIR(sb.st_mode)) {
       /* set up for reading directory */
-      res = File_get_dir(Client, filename, orig_url);
+      res = File_prepare_send_dir(client, filename, orig_url);
    } else {
       /* set up for reading a file */
-      res = File_get_file(Client, filename, &sb, orig_url);
+      res = File_prepare_send_file(client, filename, orig_url);
    }
-
-   if (res == FILE_NOT_FOUND) {
-      msg = g_strdup_printf("%s Not Found: %s",
-               S_ISDIR(sb.st_mode) ? "Directory" : "File", filename);
-   } else if (res == FILE_NO_ACCESS) {
-      msg = g_strdup_printf("Access denied to %s: %s",
-               S_ISDIR(sb.st_mode) ? "Directory" : "File", filename);
-   }
-   if (msg) {
-      d_cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "send_status_message", msg);
-      sock_handler_write_str(Client->sh, d_cmd, 1);
-      g_free(d_cmd);
-      g_free(msg);
+   if (res != 0) {
+      File_prepare_send_error_page(client, res, orig_url);
    }
 }
 
 /*
- *
+ * Send HTTP headers and then the file itself.
  */
-static gint File_get_dir(ClientInfo *Client,
-                         const gchar *DirName, const char *orig_url)
+static int File_send_file(ClientInfo *client)
 {
-   GString *g_dirname;
-   DilloDir *Ddir;
-
-   /* Let's make sure this directory url has a trailing slash */
-   g_dirname = g_string_new(DirName);
-   if ( g_dirname->str[g_dirname->len - 1] != '/' )
-      g_string_append(g_dirname, "/");
-
-   /* Let's get a structure ready for transfer */
-   Ddir = File_dillodir_new(g_dirname->str);
-   g_string_free(g_dirname, TRUE);
-   if ( Ddir ) {
-      File_transfer_dir(Client, Ddir, orig_url);
-      File_dillodir_free(Ddir);
-      return FILE_OK;
-   } else
-      return FILE_NO_ACCESS;
-}
-
-/*
- * Send the MIME content/type and then send the file itself.
- */
-static gint File_get_file(ClientInfo *Client,
-                          const gchar *filename,
-                          struct stat *sb,
-                          const char *orig_url)
-{
+//#define LBUF 1
 #define LBUF 16*1024
 
-   const gchar *ct;
-   char buf[LBUF], *d_cmd;
-   gint fd, st;
+   const char *ct;
+   const char *unknown_type = "application/octet-stream";
+   char buf[LBUF], *d_cmd, *name;
+   int st, st2, namelen;
+   bool_t gzipped = FALSE;
 
-   if ( (fd = open(filename, O_RDONLY | O_NONBLOCK)) < 0)
-      return FILE_NO_ACCESS;
+   if (client->state == st_start) {
+      /* Send DPI command */
+      d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page",
+                               client->orig_url);
+      a_Dpip_dsh_write_str(client->sh, 1, d_cmd);
+      dFree(d_cmd);
+      client->state = st_dpip;
 
-   /* Content-Type info is based on filename extension. If there's no
-    * known extension, then we do data sniffing. If this doesn't lead
-    * to a conclusion, "application/octet-stream" is sent.
-    */
-   if (!(ct = File_content_type(filename)))
-      ct = "application/octet-stream";
+   } else if (client->state == st_dpip) {
+      /* send HTTP header */
 
-   /* Send DPI command */
-   d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page", orig_url);
-   sock_handler_write_str(Client->sh, d_cmd, 1);
-   g_free(d_cmd);
-
-   /* Send HTTP stream */
-   sock_handler_printf(Client->sh, 0,
-      "Content-Type: %s\n"
-      "Content-length: %ld\n\n",
-      ct, sb->st_size);
-
-   /* Send raw file contents */
-   do {
-      if ((st = read(fd, buf, LBUF)) > 0) {
-         if (sock_handler_write(Client->sh, buf, (size_t)st, 0) != 0)
-            break;
-      } else if (st < 0) {
-         perror("[read]");
-         if (errno == EINTR || errno == EAGAIN)
-            continue;
+      /* Check for gzipped file */
+      namelen = strlen(client->filename);
+      if (namelen > 3 && !dStrcasecmp(client->filename + namelen - 3, ".gz")) {
+         gzipped = TRUE;
+         namelen -= 3;
       }
-   } while (st > 0);
+      /* Content-Type info is based on filename extension (with ".gz" removed).
+       * If there's no known extension, perform data sniffing.
+       * If this doesn't lead to a conclusion, use "application/octet-stream".
+       */
+      name = dStrndup(client->filename, namelen);
+      if (!(ct = File_content_type(name)))
+         ct = unknown_type;
+      dFree(name);
 
-   /* todo: It may be better to send an error report to dillo instead of
-    * calling abort from g_error() */
-   if (st == -1)
-      g_error("ERROR while reading from file \"%s\", error was \"%s\"\n",
-              filename, strerror(errno));
+      /* Send HTTP headers */
+      a_Dpip_dsh_write_str(client->sh, 0, "HTTP/1.1 200 OK\r\n");
+      if (gzipped) {
+         a_Dpip_dsh_write_str(client->sh, 0, "Content-Encoding: gzip\r\n");
+      }
+      if (!gzipped || strcmp(ct, unknown_type)) {
+         a_Dpip_dsh_printf(client->sh, 0, "Content-Type: %s\r\n", ct);
+      } else {
+         /* If we don't know type for gzipped data, let dillo figure it out. */
+      }
+      a_Dpip_dsh_printf(client->sh, 1,
+                        "Content-Length: %ld\r\n"
+                        "\r\n",
+                        client->file_sz);
+      client->state = st_http;
 
-   File_close(fd);
-   return FILE_OK;
+   } else if (client->state == st_http) {
+      /* Send body -- raw file contents */
+      if ((st = a_Dpip_dsh_tryflush(client->sh)) < 0) {
+         client->flags |= (st == -3) ? FILE_ERR : 0;
+      } else {
+         /* no pending data, let's send new data */
+         do {
+            st2 = read(client->file_fd, buf, LBUF);
+         } while (st2 < 0 && errno == EINTR);
+         if (st2 < 0) {
+            MSG("\nERROR while reading from file '%s': %s\n\n",
+                client->filename, dStrerror(errno));
+            client->flags |= FILE_ERR;
+         } else if (st2 == 0) {
+            client->state = st_content;
+            client->flags |= FILE_DONE;
+         } else {
+            /* ok to write */
+            st = a_Dpip_dsh_trywrite(client->sh, buf, st2);
+            client->flags |= (st == -3) ? FILE_ERR : 0;
+         }
+      }
+   }
+
+   return 0;
 }
 
 /*
- * Given an hex octet (e3, 2F, 20), return the corresponding
+ * Given a hex octet (e3, 2F, 20), return the corresponding
  * character if the octet is valid, and -1 otherwise
  */
-static int File_parse_hex_octet(const gchar *s)
+static int File_parse_hex_octet(const char *s)
 {
-   gint hex_value;
-   gchar *tail, hex[3];
+   int hex_value;
+   char *tail, hex[3];
 
-   if ( (hex[0] = s[0]) && (hex[1] = s[1]) ) {
+   if ((hex[0] = s[0]) && (hex[1] = s[1])) {
       hex[2] = 0;
       hex_value = strtol(hex, &tail, 16);
       if (tail - hex == 2)
@@ -659,30 +787,6 @@ static int File_parse_hex_octet(const gchar *s)
    return -1;
 }
 
-static void File_parse_hex_octets(char **str)
-{
-   gchar *dest, *tmp, *orig = *str;
-   int i, val;
-
-   if (strchr(orig, '%')) {
-      dest = tmp = g_new(gchar, strlen(orig) + 1);
-
-      for (i = 0; orig[i]; i++) {
-         if (orig[i] == '%' &&
-             (val = File_parse_hex_octet(orig + i + 1)) >= 0) {
-            *dest++ = val;
-            i += 2;
-         } else {
-            *dest++ = orig[i];
-         }
-      }
-      *dest = '\0';
-
-      g_free(orig);
-      *str = tmp;
-   }
-}
-
 /*
  * Make a file URL into a human (and machine) readable path.
  * The idea is to always have a path that starts with only one slash.
@@ -690,73 +794,61 @@ static void File_parse_hex_octets(char **str)
  */
 static char *File_normalize_path(const char *orig)
 {
-   char *str = (char *) orig, *basename = NULL, *ret, *p;
+   char *str = (char *) orig, *basename = NULL, *ret = NULL, *p;
 
-   /* Make sure the string starts with file: (it should, but...) */
-   if (strncmp(str, "file:", 5) != 0)
-      return NULL;
+   dReturn_val_if (orig == NULL, ret);
 
+   /* Make sure the string starts with "file:/" */
+   if (strncmp(str, "file:/", 5) != 0)
+      return ret;
    str += 5;
 
-   /* Skip slashes */
-   while (str[0] == '/' && str[1] != '\0' && str[1] == '/')
+   /* Skip "localhost" */
+   if (dStrncasecmp(str, "//localhost/", 12) == 0)
+      str += 11;
+
+   /* Skip packed slashes, and leave just one */
+   while (str[0] == '/' && str[1] == '/')
       str++;
 
-   if (*str == '\0') {
-      /* Give CWD if the string is only "file:" */
-      basename = g_get_current_dir();
-   } else if (*str == '~') {
-      if (str[1] == '\0' || str[1] == '/') {
-         /* Expand 'tilde' to user's home */
-         basename = g_strdup(g_get_home_dir());
-         str++;
-      }
-   } else if (*str == '.') {
-      if (str[1] == '\0' || str[1] == '/') {
-         /* User wants the CWD */
-         basename = g_get_current_dir();
-         str++;
-      } else if (str[1] == '.') {
-         /* One level down from the CWD */
-         char *tmp1 = g_get_current_dir();
-         char *tmp2 = strrchr(tmp1, '/');
+   {
+      int i, val;
+      Dstr *ds = dStr_sized_new(32);
+      dStr_sprintf(ds, "%s%s%s",
+                   basename ? basename : "",
+                   basename ? "/" : "",
+                   str);
+      dFree(basename);
 
-         if (tmp2) {
-            basename = g_strndup(tmp1, (guint)(tmp2 - tmp1));
+      /* Parse possible hexadecimal octets in the URI path */
+      for (i = 0; ds->str[i]; ++i) {
+         if (ds->str[i] == '%' &&
+             (val = File_parse_hex_octet(ds->str + i+1)) != -1) {
+            ds->str[i] = val;
+            dStr_erase(ds, i+1, 2);
          }
-         str += 2;
-         g_free(tmp1);
       }
-   } else if (*str != '/') {
-      return NULL;
+      /* Remove the fragment if not a part of the filename */
+      if ((p = strrchr(ds->str, '#')) != NULL && access(ds->str, F_OK) != 0)
+         dStr_truncate(ds, p - ds->str);
+      ret = ds->str;
+      dStr_free(ds, 0);
    }
-
-   ret = g_strdup_printf("%s%s%s",
-                         basename ? basename : "",
-                         basename ? "/" : "",
-                         str);
-   g_free(basename);
-
-   /* remove the fragment if present */
-   if ((p = strrchr(ret, '#')) != NULL)
-      *p = 0;
-   /* Parse possible hexadecimal octets in the URI path */
-   File_parse_hex_octets(&ret);
 
    return ret;
 }
 
 /*
- * Set the style flag and ask for a reload, so it shows inmediatly.
+ * Set the style flag and ask for a reload, so it shows immediately.
  */
-static void File_toggle_html_style(ClientInfo *Client)
+static void File_toggle_html_style(ClientInfo *client)
 {
    char *d_cmd;
 
    OLD_STYLE = !OLD_STYLE;
    d_cmd = a_Dpip_build_cmd("cmd=%s", "reload_request");
-   sock_handler_write_str(Client->sh, d_cmd, 1);
-   g_free(d_cmd);
+   a_Dpip_dsh_write_str(client->sh, 1, d_cmd);
+   dFree(d_cmd);
 }
 
 /*
@@ -764,6 +856,7 @@ static void File_toggle_html_style(ClientInfo *Client)
  */
 static void termination_handler(int signum)
 {
+  MSG("\nexit(signum), signum=%d\n\n", signum);
   exit(signum);
 }
 
@@ -773,171 +866,186 @@ static void termination_handler(int signum)
 /*
  * Add a new client to the list.
  */
-static ClientInfo *File_add_client(gint sock_fd)
+static ClientInfo *File_add_client(int sock_fd)
 {
-   ClientInfo *NewClient;
+   ClientInfo *new_client;
 
-   NewClient = g_new(ClientInfo, 1);
-   NewClient->sh = sock_handler_new(sock_fd, sock_fd, 8*1024);
-   NewClient->status = 0;
-   NewClient->done = 0;
-   NewClient->old_style = OLD_STYLE;
-  pthread_mutex_lock(&ClMut);
-   Clients = g_list_append(Clients, NewClient);
-  pthread_mutex_unlock(&ClMut);
-   return NewClient;
-}
+   new_client = dNew(ClientInfo, 1);
+   new_client->sh = a_Dpip_dsh_new(sock_fd, sock_fd, 8*1024);
+   new_client->orig_url = NULL;
+   new_client->filename = NULL;
+   new_client->file_fd = -1;
+   new_client->file_sz = 0;
+   new_client->d_dir = NULL;
+   new_client->state = 0;
+   new_client->err_code = 0;
+   new_client->flags = FILE_READ;
+   new_client->old_style = OLD_STYLE;
 
-/*
- * Get client record by number
- */
-static void *File_get_client_n(guint n)
-{
-   void *client;
-
-  pthread_mutex_lock(&ClMut);
-   client = g_list_nth_data(Clients, n);
-  pthread_mutex_unlock(&ClMut);
-
-   return client;
+   dList_append(Clients, new_client);
+   return new_client;
 }
 
 /*
  * Remove a client from the list.
  */
-static void File_remove_client_n(guint n)
+static void File_remove_client(ClientInfo *client)
 {
-   ClientInfo *Client;
-
-  pthread_mutex_lock(&ClMut);
-   Client = g_list_nth_data(Clients, n);
-   Clients = g_list_remove(Clients, (void *)Client);
-  pthread_mutex_unlock(&ClMut);
+   dList_remove(Clients, (void *)client);
 
    _MSG("Closing Socket Handler\n");
-   sock_handler_close(Client->sh);
-   sock_handler_free(Client->sh);
-   g_free(Client);
-}
+   a_Dpip_dsh_close(client->sh);
+   a_Dpip_dsh_free(client->sh);
+   File_close(client->file_fd);
+   dFree(client->orig_url);
+   dFree(client->filename);
+   File_dillodir_free(client->d_dir);
 
-/*
- * Return the number of clients.
- */
-static gint File_num_clients(void)
-{
-   guint n;
-
-  pthread_mutex_lock(&ClMut);
-   n = g_list_length(Clients);
-  pthread_mutex_unlock(&ClMut);
-
-   return n;
+   dFree(client);
 }
 
 /*
  * Serve this client.
- * (this function runs on its own thread)
  */
-static void *File_serve_client(void *data)
+static void File_serve_client(void *data, int f_write)
 {
-   char *dpip_tag, *cmd = NULL, *url = NULL, *path;
-   ClientInfo *Client = data;
+   char *dpip_tag = NULL, *cmd = NULL, *url = NULL, *path;
+   ClientInfo *client = data;
+   int st;
 
-   /* Read the dpi command */
-   dpip_tag = sock_handler_read(Client->sh);
-   MSG("dpip_tag={%s}\n", dpip_tag);
+   while (1) {
+      _MSG("File_serve_client %p, flags=%d state=%d\n",
+          client, client->flags, client->state);
+      if (client->flags & (FILE_DONE | FILE_ERR))
+         break;
+      if (client->flags & FILE_READ) {
+         dpip_tag = a_Dpip_dsh_read_token(client->sh, 0);
+         _MSG("dpip_tag={%s}\n", dpip_tag);
+         if (!dpip_tag)
+            break;
+      }
 
-   if (dpip_tag) {
-      cmd = a_Dpip_get_attr(dpip_tag, strlen(dpip_tag), "cmd");
-      if (cmd) {
-         if (strcmp(cmd, "DpiBye") == 0) {
-            DPIBYE = 1;
+      if (client->flags & FILE_READ) {
+         if (!(client->flags & FILE_AUTH_OK)) {
+            /* Authenticate our client... */
+            st = a_Dpip_check_auth(dpip_tag);
+            _MSG("a_Dpip_check_auth returned %d\n", st);
+            client->flags |= (st == 1) ? FILE_AUTH_OK : FILE_ERR;
          } else {
-            url = a_Dpip_get_attr(dpip_tag, strlen(dpip_tag), "url");
-            if (!url)
-               MSG("file.dpi:: Failed to parse 'url'\n");
+            /* Get file request */
+            cmd = a_Dpip_get_attr(dpip_tag, "cmd");
+            url = a_Dpip_get_attr(dpip_tag, "url");
+            path = File_normalize_path(url);
+            if (cmd) {
+               if (strcmp(cmd, "DpiBye") == 0) {
+                  DPIBYE = 1;
+                  MSG("(pid %d): Got DpiBye.\n", (int)getpid());
+                  client->flags |= FILE_DONE;
+               } else if (url && strcmp(url, "dpi:/file/toggle") == 0) {
+                  File_toggle_html_style(client);
+               } else if (path) {
+                  File_get(client, path, url);
+               } else {
+                  client->flags |= FILE_ERR;
+                  MSG("ERROR: URL was %s\n", url);
+               }
+            }
+            dFree(path);
+            dFree(url);
+            dFree(cmd);
+            dFree(dpip_tag);
+            break;
          }
+         dFree(dpip_tag);
+
+      } else if (f_write) {
+         /* send our answer */
+         if (client->state == st_err)
+            File_send_error_page(client);
+         else if (client->d_dir)
+            File_send_dir(client);
+         else
+            File_send_file(client);
+         break;
       }
-   }
-   g_free(cmd);
-   g_free(dpip_tag);
+   } /*while*/
 
-   if (!DPIBYE && url) {
-      _MSG("url = '%s'\n", url);
-
-      path = File_normalize_path(url);
-      if (path) {
-         _MSG("path = '%s'\n", path);
-         File_get(Client, path, url);
-      } else if (strcmp(url, "dpi:/file/toggle") == 0) {
-         File_toggle_html_style(Client);
-      } else {
-         MSG("ERROR: URL path was %s\n", url);
-      }
-      g_free(path);
-   }
-   g_free(url);
-
-   /* flag the the transfer finished */
-   Client->done = 1;
-
-   return NULL;
+   client->flags |= (client->sh->status & DPIP_ERROR) ? FILE_ERR : 0;
+   client->flags |= (client->sh->status & DPIP_EOF) ? FILE_DONE : 0;
 }
 
 /*
  * Serve the client queue.
- * (this function runs on its own thread)
  */
-static void *File_serve_clients(void *client)
+static void File_serve_clients()
 {
-   /* switch to detached state */
-   pthread_detach(pthread_self());
+   int i, f_read, f_write;
+   ClientInfo *client;
 
-   while (File_num_clients()) {
-      client = File_get_client_n((guint)0);
-      File_serve_client(client);
-      File_remove_client_n((guint)0);
+   for (i = 0; (client = dList_nth_data(Clients, i)); ++i) {
+      f_read = FD_ISSET(client->sh->fd_in, &read_set);
+      f_write = FD_ISSET(client->sh->fd_out, &write_set);
+      if (!f_read && !f_write)
+         continue;
+      File_serve_client(client, f_write);
+      if (client->flags & (FILE_DONE | FILE_ERR)) {
+         File_remove_client(client);
+         --i;
+      }
    }
-   ThreadRunning = 0;
-
-   return NULL;
 }
 
 /* --------------------------------------------------------------------------*/
 
 /*
- * Check a fd for activity, with a max timeout.
+ * Check the fd sets for activity, with a max timeout.
  * return value: 0 if timeout, 1 if input available, -1 if error.
  */
-int File_check_fd(int filedes, unsigned int seconds)
+static int File_check_fds(uint_t seconds)
 {
-  int st;
-  fd_set set;
-  struct timeval timeout;
+   int i, st;
+   ClientInfo *client;
+   struct timeval timeout;
 
-  /* Initialize the file descriptor set. */
-  FD_ZERO (&set);
-  FD_SET (filedes, &set);
+   /* initialize observed file descriptors */
+   FD_ZERO (&read_set);
+   FD_ZERO (&write_set);
+   FD_SET (STDIN_FILENO, &read_set);
+   for (i = 0; (client = dList_nth_data(Clients, i)); ++i) {
+      if (client->flags & FILE_READ)
+         FD_SET (client->sh->fd_in, &read_set);
+      if (client->flags & FILE_WRITE)
+         FD_SET (client->sh->fd_out, &write_set);
+   }
+   _MSG("Watching %d fds\n", dList_length(Clients) + 1);
 
-  /* Initialize the timeout data structure. */
-  timeout.tv_sec = seconds;
-  timeout.tv_usec = 0;
+   /* Initialize the timeout data structure. */
+   timeout.tv_sec = seconds;
+   timeout.tv_usec = 0;
 
-  do {
-     st = select(FD_SETSIZE, &set, NULL, NULL, &timeout);
-  } while (st == -1 && errno == EINTR);
-
-  return st;
+   do {
+      st = select(FD_SETSIZE, &read_set, &write_set, NULL, &timeout);
+   } while (st == -1 && errno == EINTR);
+/*
+   MSG_RAW(" (%d%s%s)", STDIN_FILENO,
+           FD_ISSET(STDIN_FILENO, &read_set) ? "R" : "",
+           FD_ISSET(STDIN_FILENO, &write_set) ? "W" : "");
+   for (i = 0; (client = dList_nth_data(Clients, i)); ++i) {
+      MSG_RAW(" (%d%s%s)", client->sh->fd_in,
+              FD_ISSET(client->sh->fd_in, &read_set) ? "R" : "",
+              FD_ISSET(client->sh->fd_out, &write_set) ? "W" : "");
+   }
+   MSG_RAW("\n");
+*/
+   return st;
 }
 
 
 int main(void)
 {
-   ClientInfo *NewClient;
-   struct sockaddr_un spun;
-   gint temp_sock_descriptor;
-   gint address_size, c_st, st = 1;
-   guint i;
+   struct sockaddr_in sin;
+   socklen_t sin_sz;
+   int sock_fd, c_st, st = 1;
 
    /* Arrange the cleanup function for abnormal terminations */
    if (signal (SIGINT, termination_handler) == SIG_IGN)
@@ -947,54 +1055,57 @@ int main(void)
    if (signal (SIGTERM, termination_handler) == SIG_IGN)
      signal (SIGTERM, SIG_IGN);
 
-   MSG("(v.1) accepting connections...\n");
+   MSG("(v.2) accepting connections...\n");
+   //sleep(20);
 
-   /* initialize mutex */
-   pthread_mutex_init(&ClMut, NULL);
+   /* initialize observed file descriptors */
+   FD_ZERO (&read_set);
+   FD_ZERO (&write_set);
+   FD_SET (STDIN_FILENO, &read_set);
+
+   /* Set STDIN socket nonblocking (to ensure accept() never blocks) */
+   fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK | fcntl(STDIN_FILENO, F_GETFL));
+
+   /* initialize Clients list */
+   Clients = dList_new(512);
 
    /* some OSes may need this... */
-   address_size = sizeof(struct sockaddr_un);
+   sin_sz = sizeof(sin);
 
    /* start the service loop */
    while (!DPIBYE) {
-      /* wait for a connection */
+      /* wait for activity */
       do {
-         c_st = File_check_fd(STDIN_FILENO, 1);
+         c_st = File_check_fds(10);
       } while (c_st == 0 && !DPIBYE);
       if (c_st < 0) {
-         perror("[select]");
+         MSG(" select() %s\n", dStrerror(errno));
          break;
       }
       if (DPIBYE)
          break;
 
-      temp_sock_descriptor =
-         accept(STDIN_FILENO, (struct sockaddr *)&spun, &address_size);
-
-      if (temp_sock_descriptor == -1) {
-         perror("[accept]");
-         break;
-      }
-
-      /* Create and initialize a new client */
-      NewClient = File_add_client(temp_sock_descriptor);
-
-      if (!ThreadRunning) {
-         ThreadRunning = 1;
-         /* Serve the client from a thread (avoids deadlocks) */
-         if (pthread_create(&NewClient->thrID, NULL,
-                            File_serve_clients, NewClient) != 0) {
-            perror("[pthread_create]");
-            ThreadRunning = 0;
+      if (FD_ISSET(STDIN_FILENO, &read_set)) {
+         /* accept the incoming connection */
+         do {
+            sock_fd = accept(STDIN_FILENO, (struct sockaddr *)&sin, &sin_sz);
+         } while (sock_fd < 0 && errno == EINTR);
+         if (sock_fd == -1) {
+            if (errno == EAGAIN)
+               continue;
+            MSG(" accept() %s\n", dStrerror(errno));
             break;
+         } else {
+            _MSG(" accept() fd=%d\n", sock_fd);
+            /* Set nonblocking */
+            fcntl(sock_fd, F_SETFL, O_NONBLOCK | fcntl(sock_fd, F_GETFL));
+            /* Create and initialize a new client */
+            File_add_client(sock_fd);
          }
+         continue;
       }
-   }
 
-   /* todo: handle a running thread better. */
-   for (i = 0; i < 5 && ThreadRunning; ++i) {
-      MSG("sleep i=%u", i);
-      sleep(i);
+      File_serve_clients();
    }
 
    if (DPIBYE)

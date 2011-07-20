@@ -3,16 +3,16 @@
  *
  * This server checks the ftp-URL to be a directory (requires wget).
  * If true, it sends back an html representation of it, and if not
- * a dpip message (which is catched by dillo who redirects the ftp URL
+ * a dpip message (which is caught by dillo who redirects the ftp URL
  * to the downloads server).
  *
  * Feel free to polish!
  *
- * Copyright 2003-2005 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright 2003-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  */
@@ -41,22 +41,23 @@
 #include <sys/time.h>
 #include <ctype.h>
 
-#include <glib.h>
-
 #include "../dpip/dpip.h"
 #include "dpiutil.h"
+#include "d_size.h"
 
 /*
  * Debugging macros
+ * (Set debugging messages to stderr, to see them)
  */
-#define _MSG(fmt...)
-#define MSG(fmt...)  g_printerr("[ftp dpi]: " fmt)
+#define _MSG(...)
+//#define MSG(...)  fprintf(stderr, "[ftp dpi]: " __VA_ARGS__)
+#define MSG(...)  printf("[ftp dpi]: " __VA_ARGS__)
 
 /*
  * Global variables
  */
-static SockHandler *sh = NULL;
-char **dl_argv = NULL;
+static Dsh *sh = NULL;
+static char **dl_argv = NULL;
 
 /*---------------------------------------------------------------------------*/
 
@@ -86,33 +87,34 @@ static const ContentType_t MimeTypes[] = {
  *
  * Return value: (0 on success, 1 on doubt, 2 on lack of data).
  */
-int a_Misc_get_content_type_from_data(void *Data, size_t Size,
-                                       const char **PT)
+static int a_Misc_get_content_type_from_data2(void *Data, size_t Size,
+                                              const char **PT)
 {
    int st = 1;      /* default to "doubt' */
    int Type = 0;    /* default to "application/octet-stream" */
    char *p = Data;
+   uchar_t ch;
    size_t i, non_ascci;
 
    /* HTML try */
-   for (i = 0; i < Size && isspace(p[i]); ++i);
-   if ((Size - i >= 5  && !g_strncasecmp(p+i, "<html", 5)) ||
-       (Size - i >= 5  && !g_strncasecmp(p+i, "<head", 5)) ||
-       (Size - i >= 6  && !g_strncasecmp(p+i, "<title", 6)) ||
-       (Size - i >= 14 && !g_strncasecmp(p+i, "<!doctype html", 14)) ||
+   for (i = 0; i < Size && dIsspace(p[i]); ++i);
+   if ((Size - i >= 5  && !dStrncasecmp(p+i, "<html", 5)) ||
+       (Size - i >= 5  && !dStrncasecmp(p+i, "<head", 5)) ||
+       (Size - i >= 6  && !dStrncasecmp(p+i, "<title", 6)) ||
+       (Size - i >= 14 && !dStrncasecmp(p+i, "<!doctype html", 14)) ||
        /* this line is workaround for FTP through the Squid proxy */
-       (Size - i >= 17 && !g_strncasecmp(p+i, "<!-- HTML listing", 17))) {
+       (Size - i >= 17 && !dStrncasecmp(p+i, "<!-- HTML listing", 17))) {
 
       Type = 1;
       st = 0;
    /* Images */
-   } else if (Size >= 4 && !g_strncasecmp(p, "GIF8", 4)) {
+   } else if (Size >= 4 && !dStrncasecmp(p, "GIF8", 4)) {
       Type = 3;
       st = 0;
-   } else if (Size >= 4 && !g_strncasecmp(p, "\x89PNG", 4)) {
+   } else if (Size >= 4 && !dStrncasecmp(p, "\x89PNG", 4)) {
       Type = 4;
       st = 0;
-   } else if (Size >= 2 && !g_strncasecmp(p, "\xff\xd8", 2)) {
+   } else if (Size >= 2 && !dStrncasecmp(p, "\xff\xd8", 2)) {
       /* JPEG has the first 2 bytes set to 0xffd8 in BigEndian - looking
        * at the character representation should be machine independent. */
       Type = 5;
@@ -120,18 +122,21 @@ int a_Misc_get_content_type_from_data(void *Data, size_t Size,
 
    /* Text */
    } else {
-      /* We'll assume "text/plain" if the set of chars above 127 is <= 10
-       * in a 256-bytes sample.  Better heuristics are welcomed! :-) */
+      /* We'll assume "text/plain" if the set of chars above 127 is <= 10%
+       * of the sample. This helps to catch ASCII, LATIN1 and UTF-8 as text.
+       * Better heuristics are welcomed! :-) */
       non_ascci = 0;
       Size = MIN (Size, 256);
-      for (i = 0; i < Size; i++)
-         if ((unsigned char) p[i] > 127)
+      for (i = 0; i < Size; i++) {
+         ch = (uchar_t) p[i];
+         if ((ch < 32 || ch > 126) && !dIsspace(ch))
             ++non_ascci;
+      }
       if (Size == 256) {
-         Type = (non_ascci > 10) ? 0 : 2;
+         Type = (non_ascci > Size/10) ? 0 : 2;
          st = 0;
       } else {
-         Type = (non_ascci > 0) ? 0 : 2;
+         Type = (non_ascci > Size/10) ? 0 : 2;
       }
    }
 
@@ -144,15 +149,15 @@ int a_Misc_get_content_type_from_data(void *Data, size_t Size,
 /*
  * Build a shell command using wget for this URL.
  */
-static void make_wget_argv(gchar *url)
+static void make_wget_argv(char *url)
 {
-   gchar *esc_url;
+   char *esc_url;
 
    if (dl_argv) {
-      g_free(dl_argv[2]);
-      g_free(dl_argv);
+      dFree(dl_argv[2]);
+      dFree(dl_argv);
    }
-   dl_argv = g_new(gchar*, 10);
+   dl_argv = dNew(char*, 10);
 
    esc_url = Escape_uri_str(url, "'");
    /* avoid malicious SMTP relaying with FTP urls */
@@ -160,37 +165,30 @@ static void make_wget_argv(gchar *url)
 
    dl_argv[0] = "wget";
    dl_argv[1] = "-O-";
-   dl_argv[2] = g_strdup(esc_url);
+   dl_argv[2] = esc_url;
    dl_argv[3] = NULL;
-/*
-   dl_argv[0] = "wget";
-   dl_argv[1] = "-t2";
-   dl_argv[2] = "-O-";
-   dl_argv[3] = g_strdup_printf("'%s'", esc_url);
-   dl_argv[4] = "2>/dev/null";
-   dl_argv[5] = NULL;
-*/
-   g_free(esc_url);
 }
 
 /*
  * Fork, exec command, get its output and send via stdout.
- * Return: Number of bytes transfered.
+ * Return: Number of bytes transfered, -1 if file-not_found, -2 if aborted.
  */
-static gint try_ftp_transfer(gchar *url)
+static int try_ftp_transfer(char *url)
 {
-#define MinSZ 256
+#define MIN_SZ 256
+#define READ_SZ 16*1024
 
    ssize_t n;
-   gint nb, minibuf_sz;
-   const gchar *mime_type;
-   char buf[4096], minibuf[MinSZ], *d_cmd;
+   int nb, has_mime_type, has_html_header, no_such_file, offer_download;
+   const char *mime_type = "application/octet-stream";
+   char buf[READ_SZ], *d_cmd;
+   Dstr *dbuf = dStr_sized_new(READ_SZ);
    pid_t ch_pid;
-   gint aborted = 0;
+   int aborted = 0;
    int DataPipe[2];
 
    if (pipe(DataPipe) < 0) {
-      MSG("pipe, %s\n", strerror(errno));
+      MSG("pipe, %s\n", dStrerror(errno));
       return 0;
    }
 
@@ -208,103 +206,144 @@ static gint try_ftp_transfer(gchar *url)
    } else if (ch_pid < 0) {
       perror("fork, ");
       exit(1);
-   } else {   
+   } else {
       /* father continues below */
       close(DataPipe[1]);
    }
 
    /* Read/Write the real data */
-   minibuf_sz = 0;
-   for (nb = 0; 1; nb += n) {
-      while ((n = read(DataPipe[0], buf, 4096)) < 0 && errno == EINTR);
-      if (n <= 0)
+   nb = 0;
+   has_mime_type = 0;
+   has_html_header = 0;
+   no_such_file = 0;
+   offer_download = 0;
+   do {
+      while ((n = read(DataPipe[0], buf, READ_SZ)) < 0 && errno == EINTR);
+      if (n > 0) {
+         dStr_append_l(dbuf, buf, n);
+         if (!has_mime_type && dbuf->len < MIN_SZ)
+            continue;
+      } else if (n < 0)
          break;
 
-      if (minibuf_sz < MinSZ) {
-         memcpy(minibuf + minibuf_sz, buf, MIN(n, MinSZ - minibuf_sz));
-         minibuf_sz += MIN(n, MinSZ - minibuf_sz);
-         if (minibuf_sz < MinSZ)
-            continue;
-         a_Misc_get_content_type_from_data(minibuf, minibuf_sz, &mime_type);
+      if (!has_mime_type) {
+         if (dbuf->len == 0) {
+            /* When the file doesn't exist, the transfer size is zero */
+            no_such_file = 1;
+            break;
+         }
+         a_Misc_get_content_type_from_data2(dbuf->str, dbuf->len, &mime_type);
+         has_mime_type = 1;
+
          if (strcmp(mime_type, "application/octet-stream") == 0) {
             /* abort transfer */
             kill(ch_pid, SIGTERM);
             /* The "application/octet-stream" MIME type will be sent and
              * Dillo will offer a download dialog */
+            offer_download = 1;
             aborted = 1;
          }
       }
 
-      if (nb == 0) {
+      if (offer_download || (!aborted && !has_html_header && dbuf->len)) {
          /* Send dpip tag */
          d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page", url);
-         sock_handler_write_str(sh, d_cmd, 1);
-         g_free(d_cmd);
+         a_Dpip_dsh_write_str(sh, 1, d_cmd);
+         dFree(d_cmd);
 
          /* Send HTTP header. */
-         sock_handler_write_str(sh, "Content-type: ", 0);
-         sock_handler_write_str(sh, mime_type, 0);
-         sock_handler_write_str(sh, "\n\n", 1);
+         a_Dpip_dsh_write_str(sh, 0, "Content-type: ");
+         a_Dpip_dsh_write_str(sh, 0, mime_type);
+         a_Dpip_dsh_write_str(sh, 1, "\r\n\r\n");
+         has_html_header = 1;
       }
 
-      if (!aborted)
-         sock_handler_write(sh, buf, n, 0);
-   }
+      if (!aborted && dbuf->len) {
+         a_Dpip_dsh_write(sh, 1, dbuf->str, dbuf->len);
+         nb += dbuf->len;
+         dStr_truncate(dbuf, 0);
+      }
+   } while (n > 0 && !aborted);
 
-   return nb;
+   dStr_free(dbuf, 1);
+   return (no_such_file ? -1 : (aborted ? -2 : nb));
 }
 
 /*
  *
  */
-int main(void)
+int main(int argc, char **argv)
 {
-   gchar *dpip_tag = NULL, *cmd = NULL, *url = NULL, *url2 = NULL;
-   gint nb;
-   gchar *p, *d_cmd;
-
-   /* Initialize the SockHandler */
-   sh = sock_handler_new(STDIN_FILENO, STDOUT_FILENO, 8*1024);
+   const char *err_msg = "404 Not Found\nNo such file or directory";
+   char *dpip_tag = NULL, *cmd = NULL, *url = NULL, *url2 = NULL;
+   int st, rc;
+   char *p, *d_cmd;
 
    /* wget may need to write a temporary file... */
-   chdir("/tmp");
+   rc = chdir("/tmp");
+   if (rc == -1) {
+      MSG("paths: error changing directory to /tmp: %s\n",
+          dStrerror(errno));
+   }
 
-   /* Read the dpi command from STDIN */
-   dpip_tag = sock_handler_read(sh);
-   g_printerr("ftp.dpi::[%s]\n", dpip_tag);
+   /* Initialize the SockHandler */
+   sh = a_Dpip_dsh_new(STDIN_FILENO, STDOUT_FILENO, 8*1024);
 
-   cmd = a_Dpip_get_attr(dpip_tag, strlen(dpip_tag), "cmd");
-   url = a_Dpip_get_attr(dpip_tag, strlen(dpip_tag), "url");
+   if (argc == 2) {
+      /* Debugging with a command line argument */
+      dpip_tag = dStrdup(argv[1]);
+   } else {
+      /* Authenticate our client... */
+      if (!(dpip_tag = a_Dpip_dsh_read_token(sh, 1)) ||
+          a_Dpip_check_auth(dpip_tag) < 0) {
+         MSG("can't authenticate request: %s\n", dStrerror(errno));
+         a_Dpip_dsh_close(sh);
+         return 1;
+      }
+      dFree(dpip_tag);
+      /* Read the dpi command from STDIN */
+      dpip_tag = a_Dpip_dsh_read_token(sh, 1);
+   }
+   MSG("tag=[%s]\n", dpip_tag);
+
+   cmd = a_Dpip_get_attr(dpip_tag, "cmd");
+   url = a_Dpip_get_attr(dpip_tag, "url");
    if (!cmd || !url) {
-      g_printerr("ftp.dpi:: Error, cmd=%s, url=%s\n", cmd, url);
+      MSG("ERROR, cmd=%s, url=%s\n", cmd, url);
       exit (EXIT_FAILURE);
    }
 
-   if ((nb = try_ftp_transfer(url)) == 0) {
+   if ((st = try_ftp_transfer(url)) == -1) {
       /* Transfer failed, the requested file may not exist or be a symlink
        * to a directory. Try again... */
       if ((p = strrchr(url, '/')) && p[1]) {
-         url2 = g_strconcat(url, "/", NULL);
-         nb = try_ftp_transfer(url2);
+         url2 = dStrconcat(url, "/", NULL);
+         st = try_ftp_transfer(url2);
       }
    }
 
-   if (nb == 0) {
+   if (st == -1) {
       /* The transfer failed, let dillo know... */
-      d_cmd = a_Dpip_build_cmd("cmd=%s to_cmd=%s msg=%s",
-                               "answer", "open_url", "not a directory");
-      sock_handler_write_str(sh, d_cmd, 1);
-      g_free(d_cmd);
+      d_cmd = a_Dpip_build_cmd("cmd=%s url=%s", "start_send_page", url);
+      a_Dpip_dsh_write_str(sh, 0, d_cmd);
+      dFree(d_cmd);
+      a_Dpip_dsh_printf(sh, 1,
+                        "HTTP/1.1 404 Not Found\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "Content-Length: %d\r\n"
+                        "\r\n"
+                        "%s",
+                        strlen(err_msg), err_msg);
    }
 
-   g_free(cmd);
-   g_free(url);
-   g_free(url2);
-   g_free(dpip_tag);
+   dFree(cmd);
+   dFree(url);
+   dFree(url2);
+   dFree(dpip_tag);
 
    /* Finish the SockHandler */
-   sock_handler_close(sh);
-   sock_handler_free(sh);
+   a_Dpip_dsh_close(sh);
+   a_Dpip_dsh_free(sh);
 
    return 0;
 }

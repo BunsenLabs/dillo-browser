@@ -6,18 +6,13 @@
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
-/* Handling of cookies takes place here.
- * This implementation aims to follow RFC 2965:
- * http://www.cis.ohio-state.edu/cs/Services/rfc/rfc-text/rfc2965.txt
- */
+/* Handling of cookies takes place here. */
 
-#define DEBUG_LEVEL 10
-#include "debug.h"
-
+#include "msg.h"
 
 #ifdef DISABLE_COOKIES
 
@@ -26,7 +21,7 @@
  */
 void a_Cookies_init(void)
 {
-   DEBUG_MSG(10, "Cookies: absolutely disabled at compilation time.\n");
+   MSG("Cookies: absolutely disabled at compilation time.\n");
 }
 
 #else
@@ -38,16 +33,13 @@ void a_Cookies_init(void)
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>       /* for time() and time_t */
 #include <ctype.h>
+#include <errno.h>
 
-#include "msg.h"
 #include "IO/Url.h"
-#include "misc.h"
 #include "list.h"
 #include "cookies.h"
 #include "capi.h"
-#include "dpiapi.h"
 #include "../dpip/dpip.h"
 
 
@@ -71,9 +63,9 @@ static int num_ccontrol = 0;
 static int num_ccontrol_max = 1;
 static CookieControlAction default_action = COOKIE_DENY;
 
-static gboolean disabled;
+static bool_t disabled;
 
-static FILE *Cookies_fopen(const char *file, gchar *init_str);
+static FILE *Cookies_fopen(const char *file, char *init_str);
 static CookieControlAction Cookies_control_check(const DilloUrl *url);
 static CookieControlAction Cookies_control_check_domain(const char *domain);
 static int Cookie_control_init(void);
@@ -82,28 +74,35 @@ static int Cookie_control_init(void);
  * Return a file pointer. If the file doesn't exist, try to create it,
  * with the optional 'init_str' as its content.
  */
-static FILE *Cookies_fopen(const char *filename, gchar *init_str)
+static FILE *Cookies_fopen(const char *filename, char *init_str)
 {
    FILE *F_in;
-   int fd;
+   int fd, rc;
 
    if ((F_in = fopen(filename, "r")) == NULL) {
       /* Create the file */
       fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
       if (fd != -1) {
-         if (init_str)
-            write(fd, init_str, strlen(init_str));
+         if (init_str) {
+            rc = write(fd, init_str, strlen(init_str));
+            if (rc == -1) {
+               MSG("Cookies: Could not write initial string to file %s: %s\n",
+                   filename, dStrerror(errno));
+            }
+         }
          close(fd);
 
-         DEBUG_MSG(10, "Cookies: Created file: %s\n", filename);
-         F_in = Cookies_fopen(filename, NULL);
+         MSG("Cookies: Created file: %s\n", filename);
+         F_in = fopen(filename, "r");
       } else {
-         DEBUG_MSG(10, "Cookies: Could not create file: %s!\n", filename);
+         MSG("Cookies: Could not create file: %s!\n", filename);
       }
    }
 
-   /* set close on exec */
-   fcntl(fileno(F_in), F_SETFD, FD_CLOEXEC | fcntl(fileno(F_in), F_GETFD));
+   if (F_in) {
+      /* set close on exec */
+      fcntl(fileno(F_in), F_SETFD, FD_CLOEXEC | fcntl(fileno(F_in), F_GETFD));
+   }
 
    return F_in;
 }
@@ -119,11 +118,11 @@ void a_Cookies_init(void)
 
    /* Read and parse the cookie control file (cookiesrc) */
    if (Cookie_control_init() != 0) {
-      DEBUG_MSG(10, "Disabling cookies.\n");
+      MSG("Disabling cookies.\n");
       return;
    }
 
-   DEBUG_MSG(10, "Enabling cookies as from cookiesrc...\n");
+   MSG("Enabling cookies as from cookiesrc...\n");
    disabled = FALSE;
 }
 
@@ -137,72 +136,82 @@ void a_Cookies_freeall()
 /*
  * Set the value corresponding to the cookie string
  */
-void a_Cookies_set(GList *cookie_strings, const DilloUrl *set_url)
+void a_Cookies_set(Dlist *cookie_strings, const DilloUrl *set_url,
+                   const char *date)
 {
    CookieControlAction action;
-   char *cmd, *path, numstr[16];
+   char *cmd, *cookie_string, *dpip_tag;
+   const char *path;
+   int i;
 
    if (disabled)
       return;
 
    action = Cookies_control_check(set_url);
    if (action == COOKIE_DENY) {
-      DEBUG_MSG(5, "Cookies: denied SET for %s\n", URL_HOST_(set_url));
+      _MSG("Cookies: denied SET for %s\n", URL_HOST_(set_url));
       return;
    }
 
-   while (cookie_strings != NULL ) {
-      char *cookie_string = cookie_strings->data;
-      path = (char *) URL_PATH_(set_url);
+   for (i = 0; (cookie_string = dList_nth_data(cookie_strings, i)); ++i) {
+      path = URL_PATH_(set_url);
+      if (date)
+         cmd = a_Dpip_build_cmd("cmd=%s cookie=%s host=%s path=%s date=%s",
+                                "set_cookie", cookie_string,
+                                URL_HOST_(set_url), path ? path : "/", date);
+      else
+         cmd = a_Dpip_build_cmd("cmd=%s cookie=%s host=%s path=%s",
+                                "set_cookie", cookie_string,
+                                URL_HOST_(set_url), path ? path : "/");
 
-      g_snprintf(numstr, 16, "%d", URL_PORT(set_url));
-      cmd = a_Dpip_build_cmd("cmd=%s cookie=%s host=%s path=%s port=%s",
-                             "set_cookie", cookie_string, URL_HOST_(set_url),
-                            path ? path : "/", numstr);
+      _MSG("Cookies.c: a_Cookies_set \n\t \"%s\" \n",cmd );
+      /* This call is commented because it doesn't guarantee the order
+       * in which cookies are set and got. (It may deadlock too) */
+      //a_Capi_dpi_send_cmd(NULL, NULL, cmd, "cookies", 1);
 
-      DEBUG_MSG(5, "Cookies.c: a_Cookies_set \n\t \"%s\" \n",cmd );
-      a_Capi_dpi_send_cmd(NULL, NULL, cmd, "cookies", 1);
-      g_free(cmd);
-
-      cookie_strings = g_list_next(cookie_strings);
+      dpip_tag = a_Dpi_send_blocking_cmd("cookies", cmd);
+      _MSG("a_Cookies_set: dpip_tag = {%s}\n", dpip_tag);
+      dFree(dpip_tag);
+      dFree(cmd);
    }
-
 }
 
 /*
- * Return a string that contains all relevant cookies as headers.
+ * Return a string containing cookie data for an HTTP query.
  */
-char *a_Cookies_get(const DilloUrl *request_url)
+char *a_Cookies_get_query(const DilloUrl *request_url)
 {
-   char *cmd, *path, *dpip_tag, *cookie, numstr[16];
+   char *cmd, *dpip_tag, *query;
+   const char *path;
    CookieControlAction action;
 
-   cookie = g_strdup("");
-
    if (disabled)
-      return cookie;
+      return dStrdup("");
 
    action = Cookies_control_check(request_url);
    if (action == COOKIE_DENY) {
-      DEBUG_MSG(5, "Cookies: denied GET for %s\n", URL_HOST_(request_url));
-      return cookie;
+      _MSG("Cookies: denied GET for %s\n", URL_HOST_(request_url));
+      return dStrdup("");
    }
-   path = (char *) URL_PATH_(request_url);
+   path = URL_PATH_(request_url);
 
-   g_snprintf(numstr, 16, "%d", URL_PORT(request_url));
-   cmd = a_Dpip_build_cmd("cmd=%s scheme=%s host=%s path=%s port=%s",
+   cmd = a_Dpip_build_cmd("cmd=%s scheme=%s host=%s path=%s",
                           "get_cookie", URL_SCHEME(request_url),
-                         URL_HOST(request_url), path ? path : "/", numstr);
+                         URL_HOST(request_url), path ? path : "/");
 
    /* Get the answer from cookies.dpi */
+   _MSG("cookies.c: a_Dpi_send_blocking_cmd cmd = {%s}\n", cmd);
    dpip_tag = a_Dpi_send_blocking_cmd("cookies", cmd);
-   g_free(cmd);
+   _MSG("cookies.c: after a_Dpi_send_blocking_cmd resp={%s}\n", dpip_tag);
+   dFree(cmd);
 
    if (dpip_tag != NULL) {
-      cookie = a_Dpip_get_attr(dpip_tag, strlen(dpip_tag), "cookie");
-      g_free(dpip_tag);
+      query = a_Dpip_get_attr(dpip_tag, "cookie");
+      dFree(dpip_tag);
+   } else {
+      query = dStrdup("");
    }
-   return cookie;
+   return query;
 }
 
 /* -------------------------------------------------------------
@@ -221,17 +230,16 @@ static int Cookie_control_init(void)
 {
    CookieControl cc;
    FILE *stream;
-   char *filename;
+   char *filename, *rc;
    char line[LINE_MAXLEN];
    char domain[LINE_MAXLEN];
    char rule[LINE_MAXLEN];
-   int i, j;
-   gboolean enabled = FALSE;
+   bool_t enabled = FALSE;
 
    /* Get a file pointer */
-   filename = a_Misc_prepend_user_home(".dillo/cookiesrc");
+   filename = dStrconcat(dGethomedir(), "/.dillo/cookiesrc", NULL);
    stream = Cookies_fopen(filename, "DEFAULT DENY\n");
-   g_free(filename);
+   dFree(filename);
 
    if (!stream)
       return 2;
@@ -239,36 +247,39 @@ static int Cookie_control_init(void)
    /* Get all lines in the file */
    while (!feof(stream)) {
       line[0] = '\0';
-      fgets(line, LINE_MAXLEN, stream);
+      rc = fgets(line, LINE_MAXLEN, stream);
+      if (!rc && ferror(stream)) {
+         MSG("Cookies1: Error while reading rule from cookiesrc: %s\n",
+             dStrerror(errno));
+         return 2; /* bail out */
+      }
 
       /* Remove leading and trailing whitespaces */
-      g_strstrip(line);
+      dStrstrip(line);
 
       if (line[0] != '\0' && line[0] != '#') {
-         i = 0;
-         j = 0;
+         int i = 0, j = 0;
 
          /* Get the domain */
-         while (!isspace(line[i]))
+         while (line[i] != '\0' && !dIsspace(line[i]))
             domain[j++] = line[i++];
          domain[j] = '\0';
 
          /* Skip past whitespaces */
-         i++;
-         while (isspace(line[i]))
+         while (dIsspace(line[i]))
             i++;
 
          /* Get the rule */
          j = 0;
-         while (line[i] != '\0' && !isspace(line[i]))
+         while (line[i] != '\0' && !dIsspace(line[i]))
             rule[j++] = line[i++];
          rule[j] = '\0';
 
-         if (g_strcasecmp(rule, "ACCEPT") == 0)
+         if (dStrcasecmp(rule, "ACCEPT") == 0)
             cc.action = COOKIE_ACCEPT;
-         else if (g_strcasecmp(rule, "ACCEPT_SESSION") == 0)
+         else if (dStrcasecmp(rule, "ACCEPT_SESSION") == 0)
             cc.action = COOKIE_ACCEPT_SESSION;
-         else if (g_strcasecmp(rule, "DENY") == 0)
+         else if (dStrcasecmp(rule, "DENY") == 0)
             cc.action = COOKIE_DENY;
          else {
             MSG("Cookies: rule '%s' for domain '%s' is not recognised.\n",
@@ -276,14 +287,23 @@ static int Cookie_control_init(void)
             continue;
          }
 
-         cc.domain = g_strdup(domain);
-         if (g_strcasecmp(cc.domain, "DEFAULT") == 0) {
+         cc.domain = dStrdup(domain);
+         if (dStrcasecmp(cc.domain, "DEFAULT") == 0) {
             /* Set the default action */
             default_action = cc.action;
-            g_free(cc.domain);
+            dFree(cc.domain);
          } else {
+            int i;
+            uint_t len = strlen(cc.domain);
+
+            /* Insert into list such that longest rules come first. */
             a_List_add(ccontrol, num_ccontrol, num_ccontrol_max);
-            ccontrol[num_ccontrol++] = cc;
+            for (i = num_ccontrol++;
+                 i > 0 && (len > strlen(ccontrol[i-1].domain));
+                 i--) {
+               ccontrol[i] = ccontrol[i-1];
+            }
+            ccontrol[i] = cc;
          }
 
          if (cc.action != COOKIE_DENY)
@@ -297,7 +317,9 @@ static int Cookie_control_init(void)
 }
 
 /*
- * Check the rules for an appropriate action for this domain
+ * Check the rules for an appropriate action for this domain.
+ * The rules are ordered by domain length, with longest first, so the
+ * first match is the most specific.
  */
 static CookieControlAction Cookies_control_check_domain(const char *domain)
 {
@@ -307,13 +329,13 @@ static CookieControlAction Cookies_control_check_domain(const char *domain)
       if (ccontrol[i].domain[0] == '.') {
          diff = strlen(domain) - strlen(ccontrol[i].domain);
          if (diff >= 0) {
-            if (g_strcasecmp(domain + diff, ccontrol[i].domain) != 0)
+            if (dStrcasecmp(domain + diff, ccontrol[i].domain) != 0)
                continue;
          } else {
             continue;
          }
       } else {
-         if (g_strcasecmp(domain, ccontrol[i].domain) != 0)
+         if (dStrcasecmp(domain, ccontrol[i].domain) != 0)
             continue;
       }
 

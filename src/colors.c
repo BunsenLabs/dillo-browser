@@ -1,11 +1,19 @@
+/*
+ * File: colors.c
+ *
+ * Copyright (C) 2000-2007 Jorge Arellano Cid <jcid@dillo.org>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
 #include <string.h>
 #include <stdlib.h>
-#include <glib.h>
 #include <ctype.h>
 #include "colors.h"
 
-#define DEBUG_LEVEL 5
-#include "debug.h"
 #include "msg.h"
 
 /*
@@ -19,7 +27,7 @@
 
 static const struct key {
    char *key;
-   gint32 val;
+   int32_t val;
 } color_keyword [] = {
 #ifdef EXTENDED_COLOR
    { "aliceblue", 0xf0f8ff},
@@ -196,22 +204,27 @@ static const struct key {
 #define NCOLORS   (sizeof(color_keyword) / sizeof(struct key))
 
 /*
- * Parse a color in hex (RRGGBB)
+ * Parse a color in hex (RRGGBB) or (RGB)
  *
  * Return Value:
  *   parsed color if successful (err = 0),
  *   default_color on error (err = 1).
  */
-static gint32 Color_parse_hex (const char *s, gint32 default_color, gint *err)
+static int32_t Color_parse_hex (const char *s, int32_t default_color, int *err)
 {
-  gint32 ret_color;
-  gchar *tail;
+  int32_t ret_color;
+  char *tail;
 
   *err = 1;
   ret_color = strtol(s, &tail, 16);
-  if ( tail - s == 6 )
+  if (tail - s == 6)
      *err = 0;
-  else
+  else if (tail - s == 3) {       /* #RGB as allowed by CSS */
+     *err = 0;
+         ret_color = ((ret_color & 0xf00) << 12) | ((ret_color & 0xf00) << 8) |
+                     ((ret_color & 0x0f0) << 8)  | ((ret_color & 0x0f0) << 4) |
+                     ((ret_color & 0x00f) << 4)  | ((ret_color & 0x00f) << 0);
+  } else
      ret_color = default_color;
 
   return ret_color;
@@ -226,14 +239,14 @@ static gint32 Color_parse_hex (const char *s, gint32 default_color, gint *err)
  *    Parsed color if successful,
  *    default_color (+ error code) on error.
  */
-gint32 a_Color_parse (const char *subtag, gint32 default_color, gint *err)
+int32_t a_Color_parse (const char *subtag, int32_t default_color, int *err)
 {
    const char *cp;
-   gint32 ret_color;
-   gint ret, low, mid, high, st = 1;
+   int32_t ret_color;
+   int ret, low, mid, high, st = 1;
 
    /* skip leading spaces */
-   for (cp = subtag; isspace(*cp); cp++);
+   for (cp = subtag; dIsspace(*cp); cp++);
 
    ret_color = default_color;
    if (*cp == '#') {
@@ -249,7 +262,7 @@ gint32 a_Color_parse (const char *subtag, gint32 default_color, gint *err)
       high = NCOLORS - 1;
       while (low <= high) {
          mid = (low + high) / 2;
-         if ((ret = g_strcasecmp(cp, color_keyword[mid].key)) < 0)
+         if ((ret = dStrcasecmp(cp, color_keyword[mid].key)) < 0)
             high = mid - 1;
          else if (ret > 0)
             low = mid + 1;
@@ -267,8 +280,8 @@ gint32 a_Color_parse (const char *subtag, gint32 default_color, gint *err)
       }
    }
 
-   DEBUG_MSG(3, "subtag: %s\n", subtag);
-   DEBUG_MSG(3, "color :  %X\n", ret_color);
+   _MSG("subtag: %s\n", subtag);
+   _MSG("color :  %X\n", ret_color);
 
    *err = st;
    return ret_color;
@@ -312,14 +325,15 @@ static int Color_distance3(long c1, long c2)
  *   if candidate has good contrast with C_txt, C_lnk and C_bg  -> candidate
  *   else another color (from the internal list)
  */
-gint32 a_Color_vc(gint32 candidate, gint32 C_txt, gint32 C_lnk, gint32 C_bg)
+int32_t a_Color_vc(int32_t candidate,
+                   int32_t C_txt, int32_t C_lnk, int32_t C_bg)
 {
                     /* candidate purple    darkcyan  darkmagenta olive   */
-  static gint32 v[] = {0x000000, 0x800080, 0x008b8b, 0x8b008b, 0x808000,
+  static int32_t v[] = {0x000000, 0x800080, 0x008b8b, 0x8b008b, 0x808000,
                     /* darkred   coral     black                        */
                        0x8b0000, 0xff7f50, 0x000000};
-  gint v_size = sizeof(v) / sizeof(v[0]);
-  gint i, max_i, score, max_score, d_bg, d_txt, d_lnk;
+  int v_size = sizeof(v) / sizeof(v[0]);
+  int i, max_i, score, max_score, d_bg, d_txt, d_lnk;
 
 
   /* set candidate in the list */

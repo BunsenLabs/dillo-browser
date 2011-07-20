@@ -1,16 +1,16 @@
 /*
  * File: downloads.cc
  *
- * Copyright (C) 2005 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright (C) 2005-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
 /*
- * A FLTK2-based GUI for the downloads dpi (dillo plugin).
+ * A FLTK-based GUI for the downloads dpi (dillo plugin).
  */
 
 #include <stdio.h>
@@ -29,30 +29,25 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 
-#include <glib.h>
-
-#include <fltk/run.h>
-#include <fltk/Window.h>
-#include <fltk/Widget.h>
-#include <fltk/damage.h>
-#include <fltk/Box.h>
-#include <fltk/draw.h>
-#include <fltk/HighlightButton.h>
-#include <fltk/PackedGroup.h>
-#include <fltk/ScrollGroup.h>
-#include <fltk/ask.h>
-#include <fltk/file_chooser.h>
+#include <FL/Fl.H>
+#include <FL/fl_draw.H>
+#include <FL/Fl_File_Chooser.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Widget.H>
+#include <FL/Fl_Group.H>
+#include <FL/Fl_Scroll.H>
+#include <FL/Fl_Pack.H>
+#include <FL/Fl_Box.H>
+#include <FL/Fl_Button.H>
 
 #include "dpiutil.h"
 #include "../dpip/dpip.h"
 
-using namespace fltk;
-
 /*
  * Debugging macros
  */
-#define _MSG(fmt...)
-#define MSG(fmt...)  g_print("[downloads dpi]: " fmt)
+#define _MSG(...)
+#define MSG(...)  printf("[downloads dpi]: " __VA_ARGS__)
 
 /*
  * Internal types
@@ -71,36 +66,35 @@ typedef enum {
 
 // ProgressBar widget --------------------------------------------------------
 
-// class FL_API ProgressBar : public Widget {
-class ProgressBar : public Widget {
+class ProgressBar : public Fl_Box {
 protected:
-  double mMin;
-  double mMax;
-  double mPresent;
-  double mStep;
-  bool mShowPct, mShowMsg;
-  char mMsg[64];
-  Color mTextColor;
-  void draw();
+   double mMin;
+   double mMax;
+   double mPresent;
+   double mStep;
+   bool mShowPct, mShowMsg;
+   char mMsg[64];
+   Fl_Color mTextColor;
+   void draw();
 public:
-  ProgressBar(int x, int y, int w, int h, const char *lbl = 0);
-  void range(double min, double max, double step = 1)  {
-     mMin = min; mMax = max; mStep = step;
-  };
-  void step(double step)        { mPresent += step; redraw(); };
-  void move(double step);
-  double minimum()        { return mMin; }
-  double maximum()        { return mMax; }
-  void minimum(double nm) { mMin = nm; };
-  void maximum(double nm) { mMax = nm; };
-  double position  ()     { return mPresent; }
-  double step()           { return mStep; }
-  void position(double pos)     { mPresent = pos; redraw(); }
-  void showtext(bool st)        { mShowPct = st; }
-  void message(char *msg) { mShowMsg = true; strncpy(mMsg,msg,63); redraw(); }
-  bool showtext()               { return mShowPct; }
-  void text_color(Color col)    { mTextColor = col; }
-  Color text_color()      { return mTextColor; }
+   ProgressBar(int x, int y, int w, int h, const char *lbl = 0);
+   void range(double min, double max, double step = 1)  {
+      mMin = min; mMax = max; mStep = step;
+   };
+   void step(double step)        { mPresent += step; redraw(); };
+   void move(double step);
+   double minimum()        { return mMin; }
+   double maximum()        { return mMax; }
+   void minimum(double nm) { mMin = nm; };
+   void maximum(double nm) { mMax = nm; };
+   double position  ()     { return mPresent; }
+   double step()           { return mStep; }
+   void position(double pos)     { mPresent = pos; redraw(); }
+   void showtext(bool st)        { mShowPct = st; }
+   void message(char *msg) { mShowMsg = true; strncpy(mMsg,msg,63); redraw(); }
+   bool showtext()               { return mShowPct; }
+   void text_color(Fl_Color col) { mTextColor = col; }
+   Fl_Color text_color()   { return mTextColor; }
 };
 
 // Download-item class -------------------------------------------------------
@@ -109,7 +103,7 @@ class DLItem {
    enum {
       ST_newline, ST_number, ST_discard, ST_copy
    };
- 
+
    pid_t mPid;
    int LogPipe[2];
    char *shortname, *fullname;
@@ -125,10 +119,10 @@ class DLItem {
    int WgetStatus;
 
    int gw, gh;
-   Group *group;
+   Fl_Group *group;
    ProgressBar *prBar;
-   HighlightButton *prButton;
-   Widget *prTitle, *prGot, *prSize, *prRate, *pr_Rate, *prETA, *prETAt;
+   Fl_Button *prButton;
+   Fl_Widget *prTitle, *prGot, *prSize, *prRate, *pr_Rate, *prETA, *prETAt;
 
 public:
    DLItem(const char *full_filename, const char *url, DLAction action);
@@ -136,15 +130,15 @@ public:
    void child_init();
    void father_init();
    void update_size(int new_sz);
-   void log_text_add(char *buf, ssize_t st);
+   void log_text_add(const char *buf, ssize_t st);
    void log_text_show();
    void abort_dl();
    void prButton_cb();
    pid_t pid() { return mPid; }
    void pid(pid_t p) { mPid = p; }
    void child_finished(int status);
-   void status_msg(char *msg) { prBar->message(msg); }
-   Widget *get_widget() { return group; }
+   void status_msg(const char *msg) { prBar->message((char*)msg); }
+   Fl_Widget *get_widget() { return group; }
    int widget_done() { return WidgetDone; }
    void widget_done(int val) { WidgetDone = val; }
    int updates_done() { return UpdatesDone; }
@@ -179,9 +173,9 @@ public:
 
 class DLWin {
    DLItemList *mDList;
-   Window *mWin;
-   ScrollGroup *mScroll;
-   PackedGroup *mPG;
+   Fl_Window *mWin;
+   Fl_Scroll *mScroll;
+   Fl_Pack *mPG;
 
 public:
    DLWin(int ww, int wh);
@@ -223,67 +217,51 @@ void ProgressBar::move(double step)
 }
 
 ProgressBar::ProgressBar(int x, int y, int w, int h, const char *lbl)
-:  Widget(x, y, w, h, lbl)
+:  Fl_Box(x, y, w, h, lbl)
 {
    mMin = mPresent = 0;
    mMax = 100;
    mShowPct = true;
    mShowMsg = false;
-   box(DOWN_BOX);
-   selection_color(BLUE);
-   color(WHITE);
-   textcolor(RED);
+   box(FL_THIN_UP_BOX);
+   color(FL_WHITE);
 }
 
 void ProgressBar::draw()
 {
-   drawstyle(style(), flags());
-   if (damage() & DAMAGE_ALL)
-      draw_box();
-   Rectangle r(w(), h());
-   box()->inset(r);
+   struct Rectangle {
+      int x, y, w, h;
+   };
+
+   //drawstyle(style(), flags());
+   draw_box();
+   Rectangle r = {x(), y(), w(), h()};
    if (mPresent > mMax)
       mPresent = mMax;
    if (mPresent < mMin)
       mPresent = mMin;
    double pct = (mPresent - mMin) / mMax;
 
-   if (vertical()) {
-      int barHeight = int (r.h() * pct + .5);
-      r.y(r.y() + r.h() - barHeight);
-      r.h(barHeight);
-   } else {
-      r.w(int (r.w() * pct + .5));
-   }
-
-   setcolor(selection_color());
-
-   if (mShowPct) {
-      fillrect(r);
-   } else {
-      Rectangle r2(int (r.w() * pct), 0, int (w() * .1), h());
-      push_clip(r2);
-       fillrect(r);
-      pop_clip();
-   }
+   r.w = r.w * pct + .5;
+   fl_rectf(r.x, r.y, r.w, r.h, FL_BLUE);
 
    if (mShowMsg) {
-      setcolor(textcolor());
-      setfont(this->labelfont(), this->labelsize());
-      drawtext(mMsg, Rectangle(w(), h()), ALIGN_CENTER);
+      fl_color(FL_RED);
+      fl_font(this->labelfont(), this->labelsize());
+      fl_draw(mMsg, x(), y(), w(), h(), FL_ALIGN_CENTER);
    } else if (mShowPct) {
       char buffer[30];
       sprintf(buffer, "%d%%", int (pct * 100 + .5));
-      setcolor(textcolor());
-      setfont(this->labelfont(), this->labelsize());
-      drawtext(buffer, Rectangle(w(), h()), ALIGN_CENTER);
+      fl_color(FL_RED);
+      fl_font(this->labelfont(), this->labelsize());
+      fl_draw(buffer, x(), y(), w(), h(), FL_ALIGN_CENTER);
    }
 }
 
 
 // Download-item class -------------------------------------------------------
 
-static void prButton_scb(Widget *, void *cb_data)
+static void prButton_scb(Fl_Widget *, void *cb_data)
 {
    DLItem *i = (DLItem *)cb_data;
 
@@ -293,21 +271,22 @@ static void prButton_scb(Widget *, void *cb_data)
 DLItem::DLItem(const char *full_filename, const char *url, DLAction action)
 {
    struct stat ss;
-   char *p, *esc_url;
+   const char *p;
+   char *esc_url;
 
    if (pipe(LogPipe) < 0) {
-      MSG("pipe, %s\n", strerror(errno));
+      MSG("pipe, %s\n", dStrerror(errno));
       return;
    }
    /* Set FD to background */
    fcntl(LogPipe[0], F_SETFL,
          O_NONBLOCK | fcntl(LogPipe[0], F_GETFL));
 
-   fullname = strdup(full_filename);
+   fullname = dStrdup(full_filename);
    p = strrchr(fullname, '/');
-   shortname = (p) ? strdup(p + 1) : strdup("??");
+   shortname = (p) ? dStrdup(p + 1) : dStrdup("??");
    p = strrchr(full_filename, '/');
-   target_dir= p ? g_strndup(full_filename,p-full_filename+1) : g_strdup("??");
+   target_dir= p ? dStrndup(full_filename,p-full_filename+1) : dStrdup("??");
 
    log_len = 0;
    log_max = 0;
@@ -319,27 +298,28 @@ DLItem::DLItem(const char *full_filename, const char *url, DLAction action)
    // Init value. Reset later, upon the first data bytes arrival
    init_time = time(NULL);
 
+   twosec_time = onesec_time = init_time;
+
    // BUG:? test a URL with ' inside.
    /* escape "'" character for the shell. Is it necessary? */
    esc_url = Escape_uri_str(url, "'");
    /* avoid malicious SMTP relaying with FTP urls */
-   if (g_strncasecmp(esc_url, "ftp:/", 5) == 0)
+   if (dStrncasecmp(esc_url, "ftp:/", 5) == 0)
       Filter_smtp_hack(esc_url);
    dl_argv = new char*[8];
    int i = 0;
-   dl_argv[i++] = "wget";
+   dl_argv[i++] = (char*)"wget";
    if (action == DL_CONTINUE) {
       if (stat(fullname, &ss) == 0)
          init_bytesize = (int)ss.st_size;
-      dl_argv[i++] = "-c";
+      dl_argv[i++] = (char*)"-c";
    }
-   dl_argv[i++] = "--load-cookies";
-   dl_argv[i++] = g_strconcat(g_get_home_dir(), "/.dillo/cookies.txt", NULL);
-   dl_argv[i++] = "-O";
+   dl_argv[i++] = (char*)"--load-cookies";
+   dl_argv[i++] = dStrconcat(dGethomedir(), "/.dillo/cookies.txt", NULL);
+   dl_argv[i++] = (char*)"-O";
    dl_argv[i++] = fullname;
-   dl_argv[i++] = esc_url; //g_strdup_printf("'%s'", esc_url);
+   dl_argv[i++] = esc_url;
    dl_argv[i++] = NULL;
-   //g_free(esc_url);
 
    DataDone = 0;
    LogDone = 0;
@@ -348,85 +328,99 @@ DLItem::DLItem(const char *full_filename, const char *url, DLAction action)
    WidgetDone = 0;
    WgetStatus = -1;
 
-   gw = 470, gh = 70;
-   group = new Group(0,0,gw,gh);
+   gw = 400, gh = 70;
+   group = new Fl_Group(0,0,gw,gh);
    group->begin();
-    prTitle = new Widget(24, 7, 290, 23, shortname);
-    prTitle->box(fltk::RSHADOW_BOX);
-    prTitle->align(ALIGN_LEFT|ALIGN_INSIDE|ALIGN_CLIP);
+    prTitle = new Fl_Box(24, 7, 290, 23);
+    prTitle->box(FL_RSHADOW_BOX);
+    prTitle->color(FL_WHITE);
+    prTitle->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE|FL_ALIGN_CLIP);
+    prTitle->copy_label(shortname);
     // Attach this 'log_text' to the tooltip
     log_text_add("Target File: ", 13);
     log_text_add(fullname, strlen(fullname));
     log_text_add("\n\n", 2);
 
     prBar = new ProgressBar(24, 40, 92, 20);
-    prBar->box(BORDER_BOX); // ENGRAVED_BOX
+    prBar->box(FL_THIN_UP_BOX);
     prBar->tooltip("Progress Status");
 
-    int ix = 122, iy = 36, iw = 50, ih = 14;
-    Widget *o = new Widget(ix,iy,iw,ih, "Got");
-    o->box(RFLAT_BOX);
-    o->color((Color)0xc0c0c000);
+    int ix = 122, iy = 37, iw = 50, ih = 14;
+    Fl_Widget *o = new Fl_Box(ix,iy,iw,ih, "Got");
+    o->box(FL_RFLAT_BOX);
+    o->color(FL_DARK2);
+    o->labelsize(12);
     o->tooltip("Downloaded Size");
-    prGot = new Widget(ix,iy+14,iw,ih, "0KB");
-    prGot->labelcolor((Color)0x6c6cbd00);
-    prGot->box(fltk::NO_BOX);
+    prGot = new Fl_Box(ix,iy+14,iw,ih, "0KB");
+    prGot->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
+    prGot->labelcolor(FL_BLUE);
+    prGot->labelsize(12);
+    prGot->box(FL_NO_BOX);
 
     ix += iw;
-    o = new Widget(ix,iy,iw,ih, "Size");
-    o->box(RFLAT_BOX);
-    o->color((Color)0xc0c0c000);
+    o = new Fl_Box(ix,iy,iw,ih, "Size");
+    o->box(FL_RFLAT_BOX);
+    o->color(FL_DARK2);
+    o->labelsize(12);
     o->tooltip("Total Size");
-    prSize = new Widget(ix,iy+14,iw,ih, "??");
-    prSize->box(fltk::NO_BOX);
+    prSize = new Fl_Box(ix,iy+14,iw,ih, "??");
+    prSize->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
+    prSize->labelsize(12);
+    prSize->box(FL_NO_BOX);
 
     ix += iw;
-    o = new Widget(ix,iy,iw,ih, "Rate");
-    o->box(RFLAT_BOX);
-    o->color((Color)0xc0c0c000);
+    o = new Fl_Box(ix,iy,iw,ih, "Rate");
+    o->box(FL_RFLAT_BOX);
+    o->color(FL_DARK2);
+    o->labelsize(12);
     o->tooltip("Current transfer Rate (KBytes/sec)");
-    prRate = new Widget(ix,iy+14,iw,ih, "??");
-    prRate->box(fltk::NO_BOX);
+    prRate = new Fl_Box(ix,iy+14,iw,ih, "??");
+    prRate->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
+    prRate->labelsize(12);
+    prRate->box(FL_NO_BOX);
 
     ix += iw;
-    o = new Widget(ix,iy,iw,ih, "~Rate");
-    o->box(RFLAT_BOX);
-    o->color((Color)0xc0c0c000);
+    o = new Fl_Box(ix,iy,iw,ih, "~Rate");
+    o->box(FL_RFLAT_BOX);
+    o->color(FL_DARK2);
+    o->labelsize(12);
     o->tooltip("Average transfer Rate (KBytes/sec)");
-    pr_Rate = new Widget(ix,iy+14,iw,ih, "??");
-    pr_Rate->box(fltk::NO_BOX);
+    pr_Rate = new Fl_Box(ix,iy+14,iw,ih, "??");
+    pr_Rate->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
+    pr_Rate->labelsize(12);
+    pr_Rate->box(FL_NO_BOX);
 
     ix += iw;
-    prETAt = o = new Widget(ix,iy,iw,ih, "ETA");
-    o->box(RFLAT_BOX);
-    o->color((Color)0xc0c0c000);
+    prETAt = o = new Fl_Box(ix,iy,iw,ih, "ETA");
+    o->box(FL_RFLAT_BOX);
+    o->color(FL_DARK2);
+    o->labelsize(12);
     o->tooltip("Estimated Time of Arrival");
-    prETA = new Widget(ix,iy+14,iw,ih, "??");
-    prETA->box(fltk::NO_BOX);
+    prETA = new Fl_Box(ix,iy+14,iw,ih, "??");
+    prETA->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
+    prETA->labelsize(12);
+    prETA->box(FL_NO_BOX);
 
-    //ix += 50;
-    //prButton = new HighlightButton(ix, 41, 38, 19, "Stop");
-    prButton = new HighlightButton(328, 9, 38, 19, "Stop");
+    prButton = new Fl_Button(326, 9, 44, 19, "Stop");
     prButton->tooltip("Stop this transfer");
-    prButton->box(UP_BOX);
-    prButton->clear_tab_to_focus();
+    prButton->box(FL_UP_BOX);
+    prButton->clear_visible_focus();
     prButton->callback(prButton_scb, this);
 
-   //group->resizable(group);
-   group->box(ROUND_UP_BOX);
+   group->box(FL_ROUNDED_BOX);
    group->end();
 }
 
 DLItem::~DLItem()
 {
    free(shortname);
-   g_free(fullname);
-   g_free(target_dir);
+   dFree(fullname);
+   dFree(target_dir);
    free(log_text);
    int idx = (strcmp(dl_argv[1], "-c")) ? 2 : 3;
-   g_free(dl_argv[idx]);
-   g_free(dl_argv[idx+3]);
-   delete(dl_argv);
+   dFree(dl_argv[idx]);
+   dFree(dl_argv[idx+3]);
+   delete [] dl_argv;
 
    delete(group);
 }
@@ -438,7 +432,7 @@ void DLItem::abort_dl()
 {
    if (!log_done()) {
       close(LogPipe[0]);
-      remove_fd(LogPipe[0]);
+      Fl::remove_fd(LogPipe[0]);
       log_done(1);
       // Stop wget
       if (!fork_done())
@@ -477,12 +471,12 @@ void DLItem::update_prSize(int newsize)
    else
       snprintf(num, 64, "%.0fKB", (float)newsize / 1024);
    prSize->copy_label(num);
-   prSize->redraw();
 }
 
-void DLItem::log_text_add(char *buf, ssize_t st)
+void DLItem::log_text_add(const char *buf, ssize_t st)
 {
-   char *p, *q, *d, num[64];
+   const char *p;
+   char *q, *d, num[64];
 
    // Make room...
    if (log_len + st >= log_max) {
@@ -511,7 +505,7 @@ void DLItem::log_text_add(char *buf, ssize_t st)
          if (isdigit(*q++ = *p)) {
             // keep here
          } else if (*p == 'K') {
-            for(--q; isdigit(q[-1]); --q); log_state = ST_discard;
+            for (--q; isdigit(q[-1]); --q) ; log_state = ST_discard;
          } else {
             log_state = ST_copy;
          }
@@ -540,20 +534,23 @@ void DLItem::log_text_add(char *buf, ssize_t st)
          total_bytesize = strtol (num, NULL, 10);
          // Update displayed size
          update_prSize(total_bytesize);
+
+         // WORKAROUND: For unknown reasons a redraw is needed here for some
+         //             machines --jcid
+         group->redraw();
       }
    }
 
    // Show we're connecting...
    if (curr_bytesize == 0) {
-      prTitle->label("Connecting...");
-      prTitle->redraw();
+      prTitle->copy_label("Connecting...");
    }
 }
 
 ///
 void DLItem::log_text_show()
 {
-   fprintf(stderr, "\nStored Log:\n%s", log_text);
+   MSG("\nStored Log:\n%s", log_text);
 }
 
 void DLItem::update_size(int new_sz)
@@ -564,8 +561,10 @@ void DLItem::update_size(int new_sz)
       // Start the timer with the first bytes got
       init_time = time(NULL);
       // Update the title
-      prTitle->label(shortname);
-      prTitle->redraw();
+      prTitle->copy_label(shortname);
+      // WORKAROUND: For unknown reasons a redraw is needed here for some
+      //             machines --jcid
+      group->redraw();
    }
 
    curr_bytesize = new_sz;
@@ -574,13 +573,14 @@ void DLItem::update_size(int new_sz)
    else
       snprintf(buf, 64, "%.0fKB", (float)curr_bytesize / 1024);
    prGot->copy_label(buf);
-   prGot->redraw();
    if (total_bytesize == -1) {
       prBar->showtext(false);
       prBar->move(1);
    } else {
       prBar->showtext(true);
-      double pos = 100.0 * (double)curr_bytesize / total_bytesize;
+      double pos = 100.0;
+      if (total_bytesize > 0)
+         pos *= (double)curr_bytesize / total_bytesize;
       prBar->position(pos);
    }
 }
@@ -588,25 +588,22 @@ void DLItem::update_size(int new_sz)
 static void read_log_cb(int fd_in, void *data)
 {
    DLItem *dl_item = (DLItem *)data;
-   int BufLen = 4096;
+   const int BufLen = 4096;
    char Buf[BufLen];
    ssize_t st;
-   int ret = -1;
 
    do {
       st = read(fd_in, Buf, BufLen);
       if (st < 0) {
          if (errno == EAGAIN) {
-            ret = 1;
             break;
          }
          perror("read, ");
          break;
       } else if (st == 0) {
          close(fd_in);
-         remove_fd(fd_in, 1);
+         Fl::remove_fd(fd_in, 1);
          dl_item->log_done(1);
-         ret = 0;
          break;
       } else {
          dl_item->log_text_add(Buf, st);
@@ -617,7 +614,7 @@ static void read_log_cb(int fd_in, void *data)
 void DLItem::father_init()
 {
    close(LogPipe[1]);
-   add_fd(LogPipe[0], 1, read_log_cb, this); // Read
+   Fl::add_fd(LogPipe[0], 1, read_log_cb, this); // Read
 
    // Start the timer after the child is running.
    // (this makes a big difference with wget)
@@ -640,8 +637,7 @@ void DLItem::child_finished(int status)
       status_msg("ABORTED");
       if (curr_bytesize == 0) {
          // Update the title
-         prTitle->label(shortname);
-         prTitle->redraw();
+         prTitle->copy_label(shortname);
       }
    }
    prButton->activate();
@@ -652,7 +648,7 @@ void DLItem::child_finished(int status)
 /*
  * Convert seconds into human readable [hour]:[min]:[sec] string.
  */
-void secs2timestr(int et, char *str)
+static void secs2timestr(int et, char *str)
 {
    int eh, em, es;
 
@@ -683,7 +679,7 @@ void DLItem::update()
 
    /* Update curr_size */
    if (stat(fullname, &ss) == -1) {
-      MSG("stat, %s\n", strerror(errno));
+      MSG("stat, %s\n", dStrerror(errno));
       return;
    }
    update_size((int)ss.st_size);
@@ -698,14 +694,12 @@ void DLItem::update()
       rate = ((float)(curr_bytesize-twosec_bytesize) / 1024) / tsec;
       snprintf(str, 64, (rate < 100) ? "%.1fK/s" : "%.0fK/s", rate);
       prRate->copy_label(str);
-      prRate->redraw();
    }
    /* ~Rate */
    if (csec >= 1) {
       _rate = ((float)(curr_bytesize-init_bytesize) / 1024) / csec;
       snprintf(str, 64, (_rate < 100) ? "%.1fK/s" : "%.0fK/s", _rate);
       pr_Rate->copy_label(str);
-      pr_Rate->redraw();
    }
 
    /* ETA */
@@ -728,7 +722,6 @@ void DLItem::update()
          prETA->copy_label(str);
       }
    }
-   prETA->redraw();
 
    /* Update one and two secs ago times and bytesizes */
    twosec_time = onesec_time;
@@ -741,13 +734,13 @@ void DLItem::update()
 
 /*! SIGCHLD handler
  */
-void raw_sigchld(int)
-{          
+static void raw_sigchld(int)
+{
    caught_sigchld = 1;
 }
 
 /*! Establish SIGCHLD handler */
-void est_sigchld(void)
+static void est_sigchld(void)
 {
    struct sigaction sigact;
    sigset_t set;
@@ -765,7 +758,7 @@ void est_sigchld(void)
 /*
  * Timeout function to check wget's exit status.
  */
-void cleanup_cb(void *data)
+static void cleanup_cb(void *data)
 {
    DLItemList *list = (DLItemList *)data;
 
@@ -784,14 +777,14 @@ void cleanup_cb(void *data)
    }
    sigprocmask(SIG_UNBLOCK, &mask_sigchld, NULL);
 
-   repeat_timeout(1.0,cleanup_cb,data);
+   Fl::repeat_timeout(1.0,cleanup_cb,data);
 }
 
 /*
  * Timeout function to update the widget indicators,
  * also remove widgets marked "done".
  */
-void update_cb(void *data)
+static void update_cb(void *data)
 {
    static int cb_used = 0;
 
@@ -811,62 +804,35 @@ void update_cb(void *data)
    if (cb_used && list->num() == 0)
       exit(0);
 
-   repeat_timeout(1.0,update_cb,data);
+   Fl::repeat_timeout(1.0,update_cb,data);
 }
 
 
 // DLWin ---------------------------------------------------------------------
 
 /*
- * Read a single line from a socket and store it in a GString.
- */
-static ssize_t readline(int socket, GString ** msg)
-{
-   ssize_t st;
-   gchar buf[16384], *aux;
-
-   /* can't use fread() */
-   do
-      st = read(socket, buf, 16384);
-   while (st < 0 && errno == EINTR);
-
-   if (st == -1)
-      MSG("readline, %s\n", strerror(errno));
-
-   if (st > 0) {
-      aux = g_strndup(buf, (guint)st);
-      g_string_assign(*msg, aux);
-      g_free(aux);
-   } else {
-      g_string_assign(*msg, "");
-   }
-
-   return st;
-}
-
-/*
  * Make a new name and place it in 'dl_dest'.
  */
-static void make_new_name(gchar **dl_dest, const gchar *url)
+static void make_new_name(char **dl_dest, const char *url)
 {
-   GString *gstr = g_string_new(*dl_dest);
-   gint idx = gstr->len;
+   Dstr *gstr = dStr_new(*dl_dest);
+   int idx = gstr->len;
 
    if (gstr->str[idx - 1] != '/'){
-      g_string_append_c(gstr, '/');
+      dStr_append_c(gstr, '/');
       ++idx;
    }
 
    /* Use a mangled url as name */
-   g_string_append(gstr, url);
+   dStr_append(gstr, url);
    for (   ; idx < gstr->len; ++idx)
       if (!isalnum(gstr->str[idx]))
          gstr->str[idx] = '_';
 
    /* free memory */
-   g_free(*dl_dest);
+   dFree(*dl_dest);
    *dl_dest = gstr->str;
-   g_string_free(gstr, FALSE);
+   dStr_free(gstr, FALSE);
 }
 
 /*
@@ -875,33 +841,48 @@ static void make_new_name(gchar **dl_dest, const gchar *url)
  */
 static void read_req_cb(int req_fd, void *)
 {
-   GString *tag;
    struct sockaddr_un clnt_addr;
-   int new_socket;
+   int sock_fd;
    socklen_t csz;
    struct stat sb;
-   char *cmd = NULL, *url = NULL, *dl_dest = NULL;
+   Dsh *sh = NULL;
+   char *dpip_tag = NULL, *cmd = NULL, *url = NULL, *dl_dest = NULL;
    DLAction action = DL_ABORT; /* compiler happiness */
 
    /* Initialize the value-result parameter */
    csz = sizeof(struct sockaddr_un);
    /* accept the request */
    do {
-      new_socket = accept(req_fd, (struct sockaddr *) &clnt_addr, &csz);
-   } while (new_socket == -1 && errno == EINTR);
-   if (new_socket == -1) {
-      MSG("accept, %s fd=%d\n", strerror(errno), req_fd);
+      sock_fd = accept(req_fd, (struct sockaddr *) &clnt_addr, &csz);
+   } while (sock_fd == -1 && errno == EINTR);
+   if (sock_fd == -1) {
+      MSG("accept, %s fd=%d\n", dStrerror(errno), req_fd);
       return;
    }
 
-   //sigprocmask(SIG_BLOCK, &blockSC, NULL);
-   tag = g_string_new(NULL);
-   readline(new_socket, &tag);
-   close(new_socket);
-   _MSG("Received tag={%s}\n", tag->str);
+   /* create a sock handler */
+   sh = a_Dpip_dsh_new(sock_fd, sock_fd, 8*1024);
 
-   if ((cmd = a_Dpip_get_attr(tag->str, (size_t)tag->len, "cmd")) == NULL) {
-      MSG("Failed to parse 'cmd' in %s\n", tag->str);
+   /* Authenticate our client... */
+   if (!(dpip_tag = a_Dpip_dsh_read_token(sh, 1)) ||
+       a_Dpip_check_auth(dpip_tag) < 0) {
+      MSG("can't authenticate request: %s fd=%d\n", dStrerror(errno), sock_fd);
+      a_Dpip_dsh_close(sh);
+      goto end;
+   }
+   dFree(dpip_tag);
+
+   /* Read request */
+   if (!(dpip_tag = a_Dpip_dsh_read_token(sh, 1))) {
+      MSG("can't read request: %s fd=%d\n", dStrerror(errno), sock_fd);
+      a_Dpip_dsh_close(sh);
+      goto end;
+   }
+   a_Dpip_dsh_close(sh);
+   _MSG("Received tag={%s}\n", dpip_tag);
+
+   if ((cmd = a_Dpip_get_attr(dpip_tag, "cmd")) == NULL) {
+      MSG("Failed to parse 'cmd' in {%s}\n", dpip_tag);
       goto end;
    }
    if (strcmp(cmd, "DpiBye") == 0) {
@@ -912,44 +893,45 @@ static void read_req_cb(int req_fd, void *)
       MSG("unknown command: '%s'. Aborting.\n", cmd);
       goto end;
    }
-   if (!(url = a_Dpip_get_attr(tag->str,(size_t)tag->len, "url"))){
-      MSG("Failed to parse 'url' in %s\n", tag->str);
+   if (!(url = a_Dpip_get_attr(dpip_tag, "url"))){
+      MSG("Failed to parse 'url' in {%s}\n", dpip_tag);
       goto end;
    }
-   if (!(dl_dest = a_Dpip_get_attr(tag->str,(size_t)tag->len,"destination"))){
-      MSG("Failed to parse 'destination' in %s\n", tag->str);
+   if (!(dl_dest = a_Dpip_get_attr(dpip_tag, "destination"))){
+      MSG("Failed to parse 'destination' in {%s}\n", dpip_tag);
       goto end;
    }
    /* 'dl_dest' may be a directory */
-   if (stat(dl_dest, &sb) == 0 && S_ISDIR(sb.st_mode))
+   if (stat(dl_dest, &sb) == 0 && S_ISDIR(sb.st_mode)) {
       make_new_name(&dl_dest, url);
-
+   }
    action = dl_win->check_filename(&dl_dest);
    if (action != DL_ABORT) {
-      // Start the whole thing whithin FLTK.
+      // Start the whole thing within FLTK.
       dl_win->add(dl_dest, url, action);
    } else if (dl_win->num() == 0) {
       exit(0);
    }
 
 end:
-   g_free(cmd);
-   g_free(url);
-   g_free(dl_dest);
-   g_string_free(tag, TRUE);
+   dFree(cmd);
+   dFree(url);
+   dFree(dl_dest);
+   dFree(dpip_tag);
+   a_Dpip_dsh_free(sh);
 }
 
 /*
  * Callback for close window request (WM or EscapeKey press)
  */
-static void dlwin_esc_cb(Widget *, void *)
+static void dlwin_esc_cb(Fl_Widget *, void *)
 {
-   char *msg = "There are running downloads.\n"
-               "ABORT them and EXIT anyway?";
+   const char *msg = "There are running downloads.\n"
+                     "ABORT them and EXIT anyway?";
 
    if (dl_win && dl_win->num_running() > 0) {
-      int ch = fltk::choice(msg, "Yes", "*No", "Cancel");
-      if (ch != 0)
+      int ch = fl_choice("%s", "Cancel", "*No", "Yes", msg);
+      if (ch == 0 || ch == 1)
          return;
    }
 
@@ -965,7 +947,6 @@ void DLWin::add(const char *full_filename, const char *url, DLAction action)
 {
    DLItem *dl_item = new DLItem(full_filename, url, action);
    mDList->add(dl_item);
-   //mPG->add(*dl_item->get_widget());
    mPG->insert(*dl_item->get_widget(), 0);
 
    _MSG("Child index = %d\n", mPG->find(dl_item->get_widget()));
@@ -979,8 +960,9 @@ void DLWin::add(const char *full_filename, const char *url, DLAction action)
    } else if (f_pid < 0) {
       perror("fork, ");
       exit(1);
-   } else {   
+   } else {
       /* father */
+      dl_item->get_widget()->show();
       dl_win->show();
       dl_item->pid(f_pid);
       dl_item->father_init();
@@ -988,31 +970,32 @@ void DLWin::add(const char *full_filename, const char *url, DLAction action)
 }
 
 /*
- * Decide what to do whe the filename already exists.
+ * Decide what to do when the filename already exists.
  * (renaming takes place here when necessary)
  */
 DLAction DLWin::check_filename(char **p_fullname)
 {
    struct stat ss;
-   char *msg;
+   Dstr *ds;
    int ch;
    DLAction ret = DL_ABORT;
 
    if (stat(*p_fullname, &ss) == -1)
       return DL_NEWFILE;
 
-   msg = g_strdup_printf(
-            "The file:\n  %s (%d Bytes)\nalready exists. What do we do?",
-            *p_fullname, (int)ss.st_size);
-   ch = fltk::choice(msg, "Rename", "Continue", "Abort");
-   g_free(msg);
+   ds = dStr_sized_new(128);
+   dStr_sprintf(ds,
+                "The file:\n  %s (%d Bytes)\nalready exists. What do we do?",
+                *p_fullname, (int)ss.st_size);
+   ch = fl_choice("%s", "Abort", "Continue", "Rename", ds->str);
+   dStr_free(ds, 1);
    MSG("Choice %d\n", ch);
-   if (ch == 0) {
+   if (ch == 2) {
       const char *p;
-      p = fltk::file_chooser("Enter a new name:", NULL, *p_fullname);
+      p = fl_file_chooser("Enter a new name:", NULL, *p_fullname);
       if (p) {
-         g_free(*p_fullname);
-         *p_fullname = g_strdup(p);
+         dFree(*p_fullname);
+         *p_fullname = dStrdup(p);
          ret = check_filename(p_fullname);
       }
    } else if (ch == 1) {
@@ -1022,18 +1005,15 @@ DLAction DLWin::check_filename(char **p_fullname)
 }
 
 /*
- * Add a new download request to the main window and
- * fork a child to do the job.
+ * Delete a download request from the main window.
  */
 void DLWin::del(int n_item)
 {
    DLItem *dl_item = mDList->get(n_item);
 
-   // Remove the widget from the scroll group
+   // Remove the widget from the packed group
    mPG->remove(dl_item->get_widget());
-   // Resize the scroll group
-   mPG->resize(mWin->w(), 1);
-
+   mScroll->redraw();
    mDList->del(n_item);
    delete(dl_item);
 }
@@ -1064,7 +1044,7 @@ int DLWin::num_running()
  */
 void DLWin::listen(int req_fd)
 {
-   add_fd(req_fd, 1, read_req_cb, NULL); // Read
+   Fl::add_fd(req_fd, 1, read_req_cb, NULL); // Read
 }
 
 /*
@@ -1085,16 +1065,16 @@ DLWin::DLWin(int ww, int wh) {
    mDList = new DLItemList();
 
    // Create the empty main window
-   mWin = new Window(ww, wh, "Downloads:");
+   mWin = new Fl_Window(ww, wh, "Downloads:");
    mWin->begin();
-    mScroll = new ScrollGroup(0,0,ww,wh);
+    mScroll = new Fl_Scroll(0,0,ww,wh);
     mScroll->begin();
-     mPG = new PackedGroup(0,0,ww,wh);
+     mPG = new Fl_Pack(0,0,ww-18,wh);
      mPG->end();
-     //mPG->spacing(10);
     mScroll->end();
-   mWin->resizable(mWin);
+    mScroll->type(Fl_Scroll::VERTICAL);
    mWin->end();
+   mWin->resizable(mScroll);
    mWin->callback(dlwin_esc_cb, NULL);
    mWin->show();
 
@@ -1104,9 +1084,9 @@ DLWin::DLWin(int ww, int wh) {
    est_sigchld();
 
    // Set the cleanup timeout
-   add_timeout(1.0, cleanup_cb, mDList);
+   Fl::add_timeout(1.0, cleanup_cb, mDList);
    // Set the update timeout
-   add_timeout(1.0, update_cb, mDList);
+   Fl::add_timeout(1.0, update_cb, mDList);
 }
 
 
@@ -1119,7 +1099,7 @@ int main()
 {
    int ww = 420, wh = 85;
 
-   lock();
+   Fl::lock();
 
    // Create the download window
    dl_win = new DLWin(ww, wh);
@@ -1129,6 +1109,6 @@ int main()
 
    MSG("started...\n");
 
-   return run();
+   return Fl::run();
 }
 

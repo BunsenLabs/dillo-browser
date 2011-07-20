@@ -3,7 +3,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -12,8 +12,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 /*! \file
@@ -21,6 +20,7 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 #include "dpid_common.h"
 #include "dpi.h"
 #include "misc_new.h"
@@ -54,17 +54,17 @@ int w_dpi_socket_dir(char *dirname, char *sockdir)
 int tst_dir(char *dir)
 {
    char *dirtest;
-   gint ret = 0;
+   int ret = 0;
 
    /* test for a directory */
-   dirtest = g_strconcat(dir, "/", NULL);
+   dirtest = dStrconcat(dir, "/", NULL);
    if (access(dirtest, F_OK) == -1) {
       ERRMSG("tst_dir", "access", errno);
-      fprintf(stderr, " - %s\n", dirtest);
+      MSG_ERR(" - %s\n", dirtest);
    } else {
       ret = 1;
    }
-   g_free(dirtest);
+   dFree(dirtest);
 
    return ret;
 }
@@ -76,14 +76,14 @@ int tst_dir(char *dir)
  */
 char *mk_sockdir(void)
 {
-   char *username, *template;
+   char *template, *logname;
 
-   username = a_Misc_get_user();
-   template = g_strconcat("/tmp/", username, "-", "XXXXXX", NULL);
+   logname = getenv("LOGNAME") ? getenv("LOGNAME") : "dillo";
+   template = dStrconcat("/tmp/", logname, "-", "XXXXXX", NULL);
    if (a_Misc_mkdtemp(template) == NULL) {
       ERRMSG("mk_sockdir", "a_Misc_mkdtemp", 0);
-      fprintf(stderr, " - %s\n", template);
-      g_free(template);
+      MSG_ERR(" - %s\n", template);
+      dFree(template);
       return (NULL);
    }
    return template;
@@ -101,30 +101,27 @@ char *init_sockdir(char *dpi_socket_dir)
    int dir_ok = 0;
 
    if ((sockdir = a_Dpi_rd_dpi_socket_dir(dpi_socket_dir)) == NULL) {
-      fprintf(stderr, "debug_msg - init_sockdir: ");
-      fprintf(stderr, "The dpi_socket_dir file does not exist\n");
+      MSG_ERR("init_sockdir: The dpi_socket_dir file %s does not exist\n",
+              dpi_socket_dir);
    } else {
       if ((dir_ok = tst_dir(sockdir)) == 1) {
-         fprintf(stderr,
-                 "debug_msg - init_sockdir: The socket directory ");
-         fprintf(stderr, "%s exists and is OK\n", sockdir);
-      } else {
-         fprintf(stderr,
-                 "debug_msg - init_sockdir: The socket directory ");
-         fprintf(stderr, "%s does not exist or is not a directory\n",
+         MSG_ERR("init_sockdir: The socket directory %s exists and is OK\n",
                  sockdir);
-         g_free(sockdir);
+      } else {
+         MSG_ERR("init_sockdir: The socket directory %s does not exist "
+                 "or is not a directory\n", sockdir);
+         dFree(sockdir);
       }
    }
    if (!dir_ok) {
       sockdir = mk_sockdir();
       if (sockdir == NULL) {
          ERRMSG("init_sockdir", "mk_sockdir", 0);
-         fprintf(stderr, " - Failed to create dpi socket directory\n");
+         MSG_ERR(" - Failed to create dpi socket directory\n");
       } else if ((w_dpi_socket_dir(dpi_socket_dir, sockdir)) == -1) {
          ERRMSG("init_sockdir", "w_dpi_socket_dir", 0);
-         fprintf(stderr, " - failed to save %s\n", sockdir);
-         g_free(sockdir);
+         MSG_ERR(" - failed to save %s\n", sockdir);
+         dFree(sockdir);
          sockdir = NULL;
       }
    }

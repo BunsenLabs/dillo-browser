@@ -1,27 +1,35 @@
-AM_CPPFLAGS=-DDPIDRC_SYS='"$(sysconfdir)/dpidrc"'
-AM_CFLAGS = @GLIB_CFLAGS@
+AM_CPPFLAGS = \
+	-I$(top_srcdir) \
+	-DDPIDRC_SYS='"$(sysconfdir)/dpidrc"'
 
-bin_PROGRAMS = dpid
-dpid_LDADD = @GLIB_LIBS@ ../dpip/libDpip.a
+bin_PROGRAMS = dpid dpidc
+dpid_LDADD = \
+	$(top_builddir)/dpip/libDpip.a \
+	$(top_builddir)/dlib/libDlib.a
+dpidc_LDADD = \
+	$(top_builddir)/dpip/libDpip.a \
+	$(top_builddir)/dlib/libDlib.a
 
-EXTRA_DIST = dpidc
-bin_SCRIPTS = dpidc
+EXTRA_DIST = dpidrc.in
 
 dpid_SOURCES = \
-	     dpi.h \
-	     dpi_service.h \
-	     dpi_socket_dir.h \
-	     dpid.h \
-	     dpid_common.h \
-	     misc_new.h \
-	     dpi.c \
-	     dpi_service.c \
-	     dpi_socket_dir.c \
-	     dpid.c \
-	     dpid_common.c \
-	     main.c \
-	     misc_new.c
+	dpi.h \
+	dpi_socket_dir.h \
+	dpid.h \
+	dpid_common.h \
+	misc_new.h \
+	dpi.c \
+	dpi_socket_dir.c \
+	dpid.c \
+	dpid_common.c \
+	main.c \
+	misc_new.c
 
-install-data-local :
-	$(mkinstalldirs) $(DESTDIR)$(sysconfdir)
-	echo dpi_dir=$(libdir)/dillo/dpi > $(DESTDIR)$(sysconfdir)/dpidrc
+dpidc_SOURCES = dpidc.c
+
+sysconf_DATA = dpidrc
+CLEANFILES = $(sysconf_DATA)
+
+dpidrc: $(srcdir)/dpidrc.in Makefile
+	sed -e 's|[@]libdir[@]|$(libdir)|' $(srcdir)/dpidrc.in > dpidrc
+

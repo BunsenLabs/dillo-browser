@@ -1,35 +1,20 @@
 /*
  * File: about.c
  *
- * Copyright (C) 1997 Raph Levien <raph@acm.org>
- * Copyright (C) 1999, 2001 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright (C) 1999-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
 #include <config.h>
-#include "IO.h"
-#include "Url.h"
-#include "../nav.h"
-#include "../web.h"
-
-typedef struct _SplashInfo SplashInfo_t;
-
-struct _SplashInfo {
-   gint FD_Read;
-   gint FD_Write;
-};
-
 
 /*
  * HTML text for startup screen
  */
-static char *Splash=
-"Content-type: text/html\n"
-"\n"
+const char *const AboutSplash=
 "<!DOCTYPE HTML PUBLIC '-//W3C//DTD HTML 4.01 Transitional//EN'>\n"
 "<html>\n"
 "<head>\n"
@@ -76,7 +61,7 @@ static char *Splash=
 "    <table border='0' cellspacing='0' cellpadding='2'><tr>\n"
 "    <td>\n"
 "    <td>\n"
-"     <a href='http://www.dillo.org/dillo-help.html'>\n"
+"     <a href='http://www.dillo.org/dillo2-help.html'>\n"
 "     Help</a>\n"
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
@@ -90,7 +75,7 @@ static char *Splash=
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
 "    <td>\n"
-"     <a href='http://www.dillo.org/ChangeLog.html'>\n"
+"     <a href='http://hg.dillo.org/dillo/file/tip/ChangeLog'>\n"
 "     ChangeLog</a>\n"
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
@@ -119,7 +104,7 @@ static char *Splash=
 " <td>\n"
 "  <table width='100%' border='0' cellspacing='1' cellpadding='3'>\n"
 "  <tr>\n"
-"    <td colspan='1' bgcolor='#CCCCCC'>Magazines\n"
+"    <td colspan='1' bgcolor='#CCCCCC'>News\n"
 "\n"
 "  <tr>\n"
 "   <td bgcolor='#FFFFFF'>\n"
@@ -136,19 +121,19 @@ static char *Splash=
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
 "    <td>\n"
-"     <a href='http://www.kuro5hin.org/?op=section;section=__all__'>KuroShin</a>\n"
+"     <a href='http://www.linux.org.uk/Portaloo.cs'>Linux.org.uk</a>\n"
+"    <tr>\n"
+"    <td>&nbsp;&nbsp;\n"
+"    <td>\n"
+"     <a href='http://www.commondreams.org/'>C.&nbsp;Dreams</a>\n"
+"    <tr>\n"
+"    <td>&nbsp;&nbsp;\n"
+"    <td>\n"
+"     <a href='http://www.voltairenet.org/en'>VoltaireNet</a>\n"
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
 "    <td>\n"
 "     <a href='http://www.nexusmagazine.com/'>Nexus&nbsp;M.</a>\n"
-"    <tr>\n"
-"    <td>&nbsp;&nbsp;\n"
-"    <td>\n"
-"     <a href='http://www.gnu-darwin.org/update.html'>Monster News</a>\n"
-"    <tr>\n"
-"    <td>&nbsp;&nbsp;\n"
-"    <td>\n"
-"     <a href='http://www.theregister.co.uk/index.html'>The Register</a>\n"
 "    </table>\n"
 "    </table>\n"
 "  </table>\n"
@@ -174,7 +159,7 @@ static char *Splash=
 "    <td><a href='http://www.wikipedia.org/'>Wikipedia</a>\n"
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
-"    <td><a href='http://www.gutenberg.org/'>P. Gutenberg</a>\n"
+"    <td><a href='http://www.gutenberg.org/'>P.&nbsp;Gutenberg</a>\n"
 "    <tr>\n"
 "    <td>&nbsp;&nbsp;\n"
 "    <td><a href='http://freshmeat.net/'>FreshMeat</a>\n"
@@ -206,7 +191,7 @@ static char *Splash=
 "     <tr><td>&nbsp;&nbsp;\n"
 "     <td><a href='http://www.violence.de'>Peace&amp;Violence</a>\n"
 "     <tr><td>&nbsp;&nbsp;\n"
-"     <td><a href='http://www.fsf.org/philosophy/right-to-read.html'>"
+"     <td><a href='http://www.gnu.org/philosophy/right-to-read.html'>\n"
 "      Right to Read</a>\n"
 "     </table>\n"
 "     </table>\n"
@@ -232,7 +217,8 @@ static char *Splash=
 " <td bgcolor='#FFFFFF'>\n"
 "  <table border='0' cellspacing='0' cellpadding='5'><tr><td>\n"
 "  <p>\n"
-"  Dillo is Free Software in the terms of the GPL.\n"
+"  Dillo is Free Software under the terms of version 3 of the\n"
+"  <a href='http://www.gnu.org/licenses/gpl.html'>GPL</a>.\n"
 "  This means you have four basic freedoms:\n"
 "  <ul>\n"
 "   <li>Freedom to use the program any way you see fit.\n"
@@ -240,10 +226,9 @@ static char *Splash=
 "   <li>Freedom to make backup copies.\n"
 "   <li>Freedom to redistribute it.\n"
 "  </ul>\n"
-"  The <a href='http://www.gnu.org/licenses/gpl.html'>GPL</a>\n"
-"  is the legal mechanism that gives you these freedoms.\n"
-"  It also protects them from being taken away: any derivative work\n"
-"  based on the program must be under the GPL.<br>\n"
+"  The GPL is the legal mechanism that gives you these freedoms.\n"
+"  It also protects you from having them taken away: any derivative work\n"
+"  based on the program must be under GPLv3 as well.<br>\n"
 "  </table>\n"
 "</table>\n"
 "</table>\n"
@@ -255,26 +240,19 @@ static char *Splash=
 "<tr>\n"
 " <td bgcolor='#CCCCCC'>\n"
 "  <h4>Release overview</h4>\n"
-"  April 26, 2006\n"
+"  February 11, 2010\n"
 "<tr>\n"
 " <td bgcolor='#FFFFFF'>\n"
 "  <table border='0' cellspacing='0' cellpadding='5'>\n"
 "  <tr>\n"
 "   <td>\n"
 "<p>\n"
-"This release is hopefully the last from the GTK1 series. The port to\n"
-"<a href='http://www.fltk.org/'>FLTK2</a> is almost finished now!\n"
+"This release features a major overhaul of the cookies subsystem,\n"
+"a reimplementation of the DPI API, a configurable connection limit,\n"
+"and various CSS improvements.\n"
 "<p>\n"
-"This release comes with extensive work on the plugins side. A new dpip\n"
-"library, a new FLTK2-based GUI for downloads!, a \"<code>data:</code>\"\n"
-"URI handler, a important bug fix in the FTP plugin, and a cookies server\n"
-"dpi that enables all Dillo instances to use cookies at the same time!\n"
-"<p>\n"
-"There's also the \"<code>./configure --disable-threaded-dns</code>\"\n"
-"option (mainly for some non reentrant BSDs), among many other improvements.\n"
-"<p>\n"
-"Remember that dillo project uses a release model where every new\n"
-"browser shall be better than the former.\n"
+"Remember that the dillo project uses a release model where every new\n"
+"version shall be better than the last.\n"
 "<EM>Keep up with the latest one!</EM>\n"
 "  </table>\n"
 "</table>\n"
@@ -288,7 +266,7 @@ static char *Splash=
 " <td bgcolor='#CCCCCC'>\n"
 "  <h4>ChangeLog highlights</h4>\n"
 "  (Extracted from the\n"
-"  <a href='http://www.dillo.org/ChangeLog.html'>full\n"
+"  <a href='http://hg.dillo.org/dillo/file/tip/ChangeLog'>full\n"
 "  ChangeLog</a>)\n"
 "<tr>\n"
 " <td bgcolor='#FFFFFF'>\n"
@@ -296,29 +274,27 @@ static char *Splash=
 "  <tr>\n"
 "   <td>\n"
 "<ul>\n"
-"<li> Designed and implemented a dpi protocol library (libDpip.a in /dpip).\n"
-"<li> Ported the bookmarks, download, file, https, ftp and hello plugins,\n"
-"     plus the dpid daemon and the rest of the source tree to use it.\n"
-"<li> Improved the dpi buffer reception to handle split buffers (This was\n"
-"     required for handling arbitrary data streams with dpip).\n"
-"<li> Fixed a serious bug with the FTP plugin that led to two downloads\n"
-"     of the same file when left-clicking a non-viewable file.\n"
-"<li> Improved the accuracy of the illegal-character error reporting\n"
-"     for URLs.\n"
-"<li> Added dpi/downloads.cc (Default FLTK2-based GUI for downloads dpi).\n"
-"<li> Added \"./configure --disable-dlgui\" to build without FLTK2-GUI\n"
-"     downloads.\n"
-"<li> Fixed dpip's tag syntax and its parsing to accept any value string.\n"
-"<li> Added DOCTYPE parsing (for better bug-meter error messages).\n"
-"<li> Fixed bookmarks dpi to escape ' in URLs and &<>\"' in titles\n"
-"     (BUG#655).\n"
-"<li> Added a check for malicious image sizes in IMG tags.\n"
-"\n"
-"<li> Added a datauri dpi to handle \"data:\" URIs (RFC-2397).\n"
-"<li> Moved the cookies management into a dpi server: cookies.dpi.\n"
-"<li> Removed the restriction of only one dillo with cookies enabled!\n"
-"<li> Added \"./configure --disable-threaded-dns\" (for some non\n"
-"     reentrant BSDs).\n"
+"<li>Added keybindings for scrolling.\n"
+"<li>Help button and local help file.\n"
+"<li>Add support for multiple class names in CSS.\n"
+"<li>Fix X11 coordinate overflows.\n"
+"<li>Improve CSS font parsing.\n"
+"<li>Enable font face setting via &lt;font&gt; element.\n"
+"<li>Ignore XML comment markers in CSS.\n"
+"<li>Fix user agent style for nested &lt;ul&gt;.\n"
+"<li>Handle signed chars. Added dIsspace() and dIsalnum() to dlib.\n"
+"<li>Changed the CCCs to build in one step (for both HTTP and DPI).\n"
+"<li>Remove the empty cache entry lingering after connection abort.\n"
+"<li>Fixed URL unescaping in the datauri DPI.\n"
+"<li>Changed and reimplemented the DPI API.\n"
+"<li>Allow linebreaks around Chinese/Japanese characters.\n"
+"<li>Fix scrolling for text search.\n"
+"<li>Tooltips.\n"
+"<li>Enable popup menu below bottom of page content.\n"
+"<li>Handle JPEGs with CMYK color space.\n"
+"<li>General cookies overhaul.\n"
+"<li>Fixed a bug in w3c_mode.\n"
+"<li>Limit number of simultaneous connections.\n"
 "</ul>\n"
 "  </table>\n"
 "</table>\n"
@@ -339,20 +315,20 @@ static char *Splash=
 "<ul>\n"
 " <li> There's a\n"
 "   <a href='http://www.dillo.org/dillorc'>dillorc</a>\n"
-"   (readable  config)  file within the tarball; It is well commented\n"
+"   (readable  config)  file within the tarball; It is well-commented\n"
 "   and  has  plenty  of  options to customize dillo, so <STRONG>copy\n"
 "   it</STRONG>  to  your  <STRONG>~/.dillo/</STRONG>  directory, and\n"
-"   modify to your taste.\n"
-" <li> There's documentation for developers in the <CODE>/doc</CODE>\n"
+"   modify it to your taste.\n"
+" <li> Documentation for developers is in the <CODE>/doc</CODE>\n"
 "   dir  within  the  tarball;  you can find directions on everything\n"
 "   else at the home page.\n"
-" <li> Dillo has context sensitive menus using the\n"
-"   right mouse button (available on pages, links, images,\n"
-"   the Back and Forward buttons, and bug meter).\n"
+" <li> The right mouse button brings up a context-sensitive menu\n"
+"   (available on pages, links, images, forms, the Back and Forward buttons,\n"
+"    and the bug meter).\n"
 " <li> Dillo behaves very nicely when browsing local files, images, and HTML.\n"
-"   It's also very good for Internet searching (try Google!).\n"
-" <li> This release is mainly intended <strong>for developers</strong>\n"
-"   and <em>advanced users</em>.\n"
+"   It's also very good for Internet searching.\n"
+" <li> This release is mainly intended for <strong>developers</strong>\n"
+"   and <strong>advanced users</strong>.\n"
 " <li> Frames, Java and Javascript are not supported.\n"
 "</ul>\n"
 "<br>\n"
@@ -387,127 +363,4 @@ static char *Splash=
 "</center>\n"
 "</body>\n"
 "</html>\n";
-
-
-
-/*
- * Send the splash screen through the IO using a pipe.
- */
-static gint About_send_splash(ChainLink *Info, DilloUrl *Url)
-{
-   gint SplashPipe[2];
-   IOData_t *io1;
-   SplashInfo_t *SpInfo;
-
-   if (pipe(SplashPipe))
-      return -1;
-
-   SpInfo = g_new(SplashInfo_t, 1);
-   SpInfo->FD_Read  = SplashPipe[0];
-   SpInfo->FD_Write = SplashPipe[1];
-   Info->LocalKey = SpInfo;
-
-   /* send splash */
-   io1 = a_IO_new(IOWrite, SpInfo->FD_Write);
-   a_IO_set_buf(io1, Splash, strlen(Splash));
-   io1->Flags |= (IOFlag_ForceClose + IOFlag_SingleWrite);
-   a_Chain_link_new(Info, a_About_ccc, BCK, a_IO_ccc, 1, 1);
-   a_Chain_bcb(OpStart, Info, io1, NULL);
-   a_Chain_bcb(OpSend, Info, io1, NULL);
-
-   /* Tell the cache to receive answer */
-   a_Chain_fcb(OpSend, Info, &SpInfo->FD_Read, NULL);
-   return SpInfo->FD_Read;
-}
-
-/*
- * Push the right URL for each supported "about"
- * ( Data1 = Requested URL; Data2 = Web structure )
- */
-static gint About_get(ChainLink *Info, void *Data1, void *Data2)
-{
-   char *loc;
-   const char *tail;
-   DilloUrl *Url = Data1;
-   DilloWeb *web = Data2;
-   DilloUrl *LocUrl;
-
-   /* Don't allow the "about:" method for non-root URLs */
-   if (!(web->flags & WEB_RootUrl))
-      return -1;
-
-   tail = URL_PATH(Url);
-
-   if (!strcmp(tail, "splash")) {
-      return About_send_splash(Info, Url);
-   }
-
-   if (!strcmp(tail, "jwz"))
-      loc = "http://www.jwz.org/";
-   else if (!strcmp(tail, "raph"))
-      loc = "http://www.levien.com/";
-   else if (!strcmp(tail, "yosh"))
-      loc = "http://yosh.gimp.org/";
-   else if (!strcmp(tail, "snorfle"))
-      loc = "http://www.snorfle.net/";
-   else if (!strcmp(tail, "dillo"))
-      loc = "http://www.dillo.org/";
-   else if (!strcmp(tail, "help"))
-      loc = "http://www.dillo.org/dillo-help.html";
-   else
-      loc = "http://www.google.com/";
-
-   LocUrl = a_Url_new(loc, NULL, 0, 0, 0);
-   a_Nav_push(web->bw, LocUrl);
-   a_Url_free(LocUrl);
-   return -1;
-}
-
-/*
- * CCC function for the ABOUT module
- */
-void a_About_ccc(int Op, int Branch, int Dir, ChainLink *Info,
-                 void *Data1, void *Data2)
-{
-   int FD;
-
-   a_Chain_debug_msg("a_About_ccc", Op, Branch, Dir);
-
-   if ( Branch == 1 ) {
-      /* Start about method */
-      if (Dir == BCK) {
-         switch (Op) {
-         case OpStart:
-            /* (Data1 = Url;  Data2 = Web) */
-            // Info->LocalKey gets set in About_get
-            if ((FD = About_get(Info, Data1, Data2)) == -1)
-               a_Chain_fcb(OpAbort, Info, NULL, NULL);
-            break;
-         case OpAbort:
-            a_Chain_bcb(OpAbort, Info, NULL, NULL);
-            g_free(Info->LocalKey);
-            g_free(Info);
-            break;
-         }
-      } else {  /* FWD */
-         switch (Op) {
-         case OpSend:
-            /* This means the sending framework was set OK */
-            FD = ((SplashInfo_t *)Info->LocalKey)->FD_Read;
-            a_Chain_fcb(OpSend, Info, &FD, NULL);
-            break;
-         case OpEnd:
-            /* Everything sent! */
-            a_Chain_del_link(Info, BCK);
-            g_free(Info->LocalKey);
-            a_Chain_fcb(OpEnd, Info, NULL, NULL);
-            break;
-         case OpAbort:
-            g_free(Info->LocalKey);
-            a_Chain_fcb(OpAbort, Info, NULL, NULL);
-            break;
-         }
-      }
-   }
-}
 

@@ -1,11 +1,11 @@
 /*
  * File: klist.c
  *
- * Copyright 2001 Jorge Arellano Cid <jcid@dillo.org>
+ * Copyright 2001-2007 Jorge Arellano Cid <jcid@dillo.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  */
 
@@ -24,69 +24,84 @@
 /*
  * Compare function for searching data by its key
  */
-static gint Klist_key_cmp(gconstpointer Node, gconstpointer key)
+static int Klist_node_by_key_cmp(const void *Node, const void *key)
 {
-   return ( GPOINTER_TO_INT(key) != ((KlistNode_t *)Node)->Key );
+   return ((KlistNode_t *)Node)->Key - VOIDP2INT(key);
+}
+
+/*
+ * Compare function for searching data by node
+ */
+static int Klist_node_by_node_cmp(const void *Node1, const void *Node2)
+{
+   return ((KlistNode_t *)Node1)->Key - ((KlistNode_t *)Node2)->Key;
 }
 
 /*
  * Return the data pointer for a given Key (or NULL if not found)
  */
-gpointer a_Klist_get_data(Klist_t *Klist, gint Key)
+void *a_Klist_get_data(Klist_t *Klist, int Key)
 {
-   GSList *list;
+   void *aux;
 
    if (!Klist)
       return NULL;
-   list= g_slist_find_custom(Klist->List, GINT_TO_POINTER(Key), Klist_key_cmp);
-   return (list) ? ((KlistNode_t *)list->data)->Data : NULL;
+   aux = dList_find_sorted(Klist->List, INT2VOIDP(Key), Klist_node_by_key_cmp);
+   return (aux) ? ((KlistNode_t*)aux)->Data : NULL;
 }
 
 /*
  * Insert a data pointer and return a key for it.
  */
-gint a_Klist_insert(Klist_t **Klist, gpointer Data)
+int a_Klist_insert(Klist_t **Klist, void *Data)
 {
    KlistNode_t *Node;
 
    if (!*Klist) {
-      (*Klist) = g_new(Klist_t, 1);
-      (*Klist)->List = NULL;
+      (*Klist) = dNew(Klist_t, 1);
+      (*Klist)->List = dList_new(32);
       (*Klist)->Clean = 1;
       (*Klist)->Counter = 0;
    }
 
    /* This avoids repeated keys at the same time */
    do {
-      if ( ++((*Klist)->Counter) == 0 ) {
+      if (++((*Klist)->Counter) == 0) {
          (*Klist)->Counter = 1;
          (*Klist)->Clean = 0;
       }
    } while (!((*Klist)->Clean) &&
             a_Klist_get_data((*Klist), (*Klist)->Counter));
 
-   Node = g_new(KlistNode_t, 1);
+   Node = dNew(KlistNode_t, 1);
    Node->Key  = (*Klist)->Counter;
    Node->Data = Data;
-   (*Klist)->List = g_slist_prepend((*Klist)->List, Node);
-
+   dList_insert_sorted((*Klist)->List, Node, Klist_node_by_node_cmp);
    return (*Klist)->Counter;
 }
 
 /*
  * Remove data by Key
  */
-void a_Klist_remove(Klist_t *Klist, gint Key)
+void a_Klist_remove(Klist_t *Klist, int Key)
 {
-   GSList *list;
+   void *data;
 
-   list= g_slist_find_custom(Klist->List, GINT_TO_POINTER(Key), Klist_key_cmp);
-   if (list) {
-      g_free(list->data);
-      Klist->List = g_slist_remove(Klist->List, list->data);
+   data = dList_find_sorted(Klist->List, INT2VOIDP(Key),Klist_node_by_key_cmp);
+   if (data) {
+      dList_remove(Klist->List, data);
+      dFree(data);
    }
-   if (Klist->List == NULL)
+   if (dList_length(Klist->List) == 0)
       Klist->Clean = 1;
+}
+
+/*
+ * Return the number of elements in the Klist
+ */
+int a_Klist_length(Klist_t *Klist)
+{
+   return dList_length(Klist->List);
 }
 
 /*
@@ -94,18 +109,19 @@ void a_Klist_remove(Klist_t *Klist, gint Key)
  */
 void a_Klist_free(Klist_t **KlistPtr)
 {
-   gpointer node;
+   void *node;
    Klist_t *Klist = *KlistPtr;
 
    if (!Klist)
       return;
 
-   while (Klist && Klist->List) {
-      node = Klist->List->data;
-      Klist->List = g_slist_remove(Klist->List, node);
-      g_free(node);
+   while (dList_length(Klist->List) > 0) {
+      node = dList_nth_data(Klist->List, 0);
+      dList_remove_fast(Klist->List, node);
+      dFree(node);
    }
-   g_free(Klist);
+   dList_free(Klist->List);
+   dFree(Klist);
    *KlistPtr = NULL;
 }
 
