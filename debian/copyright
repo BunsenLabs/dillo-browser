@@ -6,30 +6,32 @@ Upstream Author: Jorge Arellano Cid <jcid@dillo.org>
 
 Copyright:
 
-Copyright 1999-2006, Jorge Arellano Cid <jcid@dillo.org>
+Copyright 1999-2011, Jorge Arellano Cid <jcid@dillo.org>
 
 Copyright holders: Jorge Arellano Cid <jcid@dillo.org>
+		   Sebastian Geerken <sgeerken@dillo.org>
+		   Johannes Hofmann <Johannes.Hofmann@gmx.de>
+		   Luca Rota <drake@freemail.it>
 		   Randall Maas <randym@acm.org>
 		   Raph Levien <raph@acm.org>
-		   Sebastian Geerken <sgeerken@users.sourceforge.net>
 		   James McCollough <jamesm@gtwn.net>
-		   Luca Rota <drake@freemail.it>
 		   Sammy Mannaert <nstalkie@tvd.be>
 		   Lars Clausen <lrclause@cs.uiuc.edu>
 		   Juergen Viksell <jorgen.viksell@telia.com>
 		   Ferdi Franceschini <ferdif@optusnet.com.au>
 		   Garrett Kajmowicz <gkajmowi@tbaytel.net>
 		   Sammy Mannaert <nstalkie@tvd.be>
+		   Jeremy Henty <onepoint@starurchin.org>
 		   Peter Mattis
 		   Spencer Kimball
 		   Josh MacDonald
 		   Eric Gaudet
 
-License (except for some exceptions that are listed below the licensetext):
-License (except for progressbar.h,dw_gtk_statuslabel.c,dw_gtk_statuslabel.h):
+License:
+
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
+    the Free Software Foundation; either version 3 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
@@ -42,23 +44,4 @@ License (except for progressbar.h,dw_gtk_statuslabel.c,dw_gtk_statuslabel.h):
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
 On Debian systems, the complete text of the GNU General
-Public License can be found in `/usr/share/common-licenses/GPL'.
-
-License (for src/progresbar.h, dw_gtk_statuslabel.c, dw_gtk_statuslabel.h):
-
-    This package is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2 of the License, or (at your option) any later version.
-
-    This package is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this package; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
-
-On Debian systems, the complete text of the GNU Lesser General
-Public License can be found in `/usr/share/common-licenses/LGPL'.
+Public License can be found in `/usr/share/common-licenses/GPL-3'.
