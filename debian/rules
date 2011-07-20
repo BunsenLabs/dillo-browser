@@ -48,6 +48,8 @@ clean-patched:
 	-rm -rf debian/dillo debian/files* core debian/substvars debian/prerm.debhelper debian/*postinst.debhelper debian/*postrm.debhelper
 	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`
 	-rm -f `find . -name "*.gmo"` src/dillo dpid/dpid config/dillocfg
+	-rm -f `find . -name "Makefile.in"` config.guess config.sub configure
+	-rm -f depcomp install-sh missing aclocal.m4 debian/dillo.png
 	[ ! -f Makefile ] || $(MAKE) clean
 	dh_clean
 
