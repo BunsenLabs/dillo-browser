@@ -1,9 +1,9 @@
 Source: dillo
 Section: web
 Priority: extra
-Maintainer: Devid Filoni <d.filoni@techemail.com>
+Maintainer: Axel Beckert <abe@debian.org>
 Standards-Version: 3.7.3
-Build-Depends: debhelper (>= 5), libgtk1.2-dev, libglib1.2-dev, libpng12-dev, zlib1g-dev, libjpeg62-dev, automake1.4 | automaken, autoconf, autotools-dev, dpatch, libxft-dev, libssl-dev, sharutils
+Build-Depends: debhelper (>= 5), libfltk1.3-dev, libglib1.2-dev, libpng12-dev, zlib1g-dev, libjpeg8-dev | libjpeg-dev, automake | automaken, autoconf, autotools-dev, libxft-dev, libssl-dev, sharutils
 Homepage: http://www.dillo.org
 
 Package: dillo
