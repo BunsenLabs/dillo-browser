@@ -22,14 +22,7 @@ endif
 configure: config.status
 config.status: patch-stamp
 	dh_testdir
-	[ -f config.sub.d-r-orig ] || cp -p config.sub config.sub.d-r-orig
-	[ -f config.guess.d-r-orig ] || cp -p config.guess config.guess.d-r-orig
-ifneq "$(wildcard /usr/share/misc/config.sub)" ""
-	cp -f /usr/share/misc/config.sub config.sub
-endif
-ifneq "$(wildcard /usr/share/misc/config.guess)" ""
-	cp -f /usr/share/misc/config.guess config.guess
-endif
+	dh_autotools-dev_updateconfig
 	./configure $(CONFFLAGS) \
 				--prefix=/usr \
 				--sysconfdir=/etc \
@@ -57,8 +50,7 @@ clean-patched:
 	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`
 	-rm -f `find . -name "*.gmo"` src/dillo dpid/dpid config/dillocfg
 	[ ! -f Makefile ] || $(MAKE) clean
-	[ ! -f config.sub.d-r-orig ] || mv config.sub.d-r-orig config.sub
-	[ ! -f config.guess.d-r-orig ] || mv config.guess.d-r-orig config.guess
+	dh_autotools-dev_restoreconfig
 	dh_clean
 
 install: build
