@@ -29,8 +29,6 @@ config.status: patch
 				--sysconfdir=/etc \
 				--enable-ipv6 \
 				--enable-ssl \
-				--enable-meta-refresh \
-				--disable-dlgui \
 				CFLAGS="$(CFLAGS)" \
 
 build: build-stamp
