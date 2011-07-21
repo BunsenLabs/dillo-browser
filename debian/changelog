@@ -1,4 +1,4 @@
-dillo (3~hg20110720-1) unstable; urgency=low
+dillo (3~hg20110720-1) experimental; urgency=low
 
   * Reintroducing the FLTK 1.3 using version into unstable.
   * New Maintainer
