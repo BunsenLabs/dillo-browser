@@ -15,6 +15,7 @@ dillo (3~hg20110720-1) experimental; urgency=low
     + Clean up some more leftover files in clean target
     + No more update config.{sub,config} manually (autogen.sh does it
       already)
+    + Fix lintian warning debian-rules-missing-recommended-target
   * debian/copyright:
     + Update License, Copyright years and Copyright holders
     + Documented GPL expection about OpenSSL linking in debian/copyright
