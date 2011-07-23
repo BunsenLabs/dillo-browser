@@ -4,7 +4,7 @@ Priority: extra
 Maintainer: Axel Beckert <abe@debian.org>
 Standards-Version: 3.7.3
 Build-Depends: debhelper (>= 5), libfltk1.3-dev, libglib2.0-dev, libpng12-dev, zlib1g-dev, libjpeg8-dev | libjpeg-dev, automake | automaken, autoconf, autotools-dev, libssl-dev, sharutils, quilt
-Homepage: http://www.dillo.org
+Homepage: http://www.dillo.org/
 
 Package: dillo
 Architecture: any
