@@ -1,9 +1,27 @@
 dillo (3~hg20110720-1) experimental; urgency=low
 
-  * Reintroducing the FLTK 1.3 using version into unstable.
-  * New Maintainer
+  * Reintroducing the FLTK 1.3 using version. (Closes: #634811)
+  * debian/control:
+    + New Maintainer
+    + Maintaining the package in a git repository, adding Vcs-* headers
+    + Added dependency on ${misc:Depends} for debhelper
+    + Removed Conflicts against the gzilla package from Potato
+    + Replace libglib1.2-dev build dependency by libglib2.0-dev, remove
+      unneeded build dependency libxft-dev
+  * debian/rules:
+    + Uses now $(CURDIR) instead of `pwd` in debian/rules
+    + Dropped obsolete dh_desktop call in debian/rules
+    + Clean up some more leftover files in clean target
+    + No more update config.{sub,config} manually (autogen.sh does it
+      already)
+  * debian/copyright:
+    + Update License, Copyright years and Copyright holders
+    + Documented GPL expection about OpenSSL linking in debian/copyright
+  * Use set -e also in debian/prerm, not only in debian/postinst
+  * For now install the whole docs directory into /usr/share/doc/dillo/
+  * Remove all patches, they're no more relevant.
 
- -- Axel Beckert <abe@debian.org>  Thu, 21 Jul 2011 16:06:29 +0200
+ -- Axel Beckert <abe@debian.org>  Sat, 23 Jul 2011 22:11:28 +0200
 
 dillo (0.8.6-3) unstable; urgency=low
 
