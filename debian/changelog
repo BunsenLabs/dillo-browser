@@ -8,6 +8,7 @@ dillo (3~hg20110720-1) experimental; urgency=low
     + Removed Conflicts against the gzilla package from Potato
     + Replace libglib1.2-dev build dependency by libglib2.0-dev, remove
       unneeded build dependency libxft-dev
+    + Bump Standards-Versions to 3.9.2, no further changes
   * debian/rules:
     + Uses now $(CURDIR) instead of `pwd` in debian/rules
     + Dropped obsolete dh_desktop call in debian/rules
