@@ -2,13 +2,4 @@ README
 AUTHORS
 dillorc
 NEWS
-doc/Cache.txt
-doc/Cookies.txt
-doc/Dillo.txt
-doc/Dw.txt
-doc/HtmlParser.txt
-doc/IO.txt
-doc/Images.txt
-doc/NC_design.txt
-doc/README
-doc/Selection.txt
+doc/
