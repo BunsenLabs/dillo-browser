@@ -8,7 +8,7 @@ Homepage: http://www.dillo.org/
 
 Package: dillo
 Architecture: any
-Depends: ${shlibs:Depends}, wget
+Depends: ${shlibs:Depends}, ${misc:Depends}, wget
 Provides: www-browser
 Description: Small and fast web browser
  Dillo aims to be a multiplatform browser alternative that is small,
