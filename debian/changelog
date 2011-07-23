@@ -19,7 +19,8 @@ dillo (3~hg20110720-1) experimental; urgency=low
     + Documented GPL expection about OpenSSL linking in debian/copyright
   * Use set -e also in debian/prerm, not only in debian/postinst
   * For now install the whole docs directory into /usr/share/doc/dillo/
-  * Remove all patches, they're no more relevant.
+  * Remove all patches, they're no more relevant. Also remove the patch
+    system and according dependencies.
 
  -- Axel Beckert <abe@debian.org>  Sat, 23 Jul 2011 22:11:28 +0200
 

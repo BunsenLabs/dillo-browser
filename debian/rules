@@ -2,8 +2,6 @@
 
 #export DH_VERBOSE=1
 
-include /usr/share/quilt/quilt.make
-
 DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 
@@ -23,7 +21,7 @@ endif
 configure: config.status
 config.h.in.backup:
 	[ -f config.h.in.backup ] || cp -pv config.h.in config.h.in.backup
-config.status: config.h.in.backup patch
+config.status: config.h.in.backup
 	dh_testdir
 	./autogen.sh
 	./configure $(CONFFLAGS) \
@@ -35,12 +33,12 @@ config.status: config.h.in.backup patch
 
 build: build-stamp
 
-build-stamp: config.status patch
+build-stamp: config.status
 	dh_testdir
 	$(MAKE)
 	touch build-stamp
 
-clean: clean-patched unpatch
+clean: clean-patched
 clean-patched:
 	dh_testdir
 	dh_testroot
