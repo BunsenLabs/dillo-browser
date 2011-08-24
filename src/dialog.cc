@@ -22,6 +22,8 @@
 #include <FL/Fl_Output.H>
 #include <FL/Fl_Input.H>
 #include <FL/Fl_Secret_Input.H>
+#include <FL/Fl_Choice.H>
+#include <FL/Fl_Menu_Item.H>
 
 #include "msg.h"
 #include "dialog.hh"
@@ -75,6 +77,25 @@ int CustInput3::handle(int e)
    }
    return Fl_Input::handle(e);
 }
+
+/*
+ * Used to make the ENTER key activate the CustChoice
+ */
+class CustChoice : public Fl_Choice {
+public:
+   CustChoice (int x, int y, int w, int h, const char* l=0) :
+      Fl_Choice(x,y,w,h,l) {};
+   int handle(int e) {
+      if (e == FL_KEYBOARD &&
+          (Fl::event_key() == FL_Enter || Fl::event_key() == FL_Down) &&
+          (Fl::event_state() & (FL_SHIFT|FL_CTRL|FL_ALT|FL_META)) == 0) {
+         MSG("CustChoice: ENTER\n");
+         return Fl_Choice::handle(FL_PUSH);
+      }
+      return Fl_Choice::handle(e);
+   };
+};
+
 //----------------------------------------------------------------------------
 
 
@@ -104,6 +125,7 @@ static void input_cb(Fl_Widget *button, void *number)
  */
 const char *a_Dialog_input(const char *msg)
 {
+   static Fl_Menu_Item *pm = 0;
    int ww = 450, wh = 130, gap = 10, ih = 60, bw = 80, bh = 30;
 
    input_answer = 0;
@@ -134,6 +156,24 @@ const char *a_Dialog_input(const char *msg)
     c_inp->labelsize(14);
     c_inp->textsize(14);
 
+    CustChoice *ch = new CustChoice(1*gap,ih+3*gap,180,24);
+    if (!pm) {
+       int n_it = dList_length(prefs.search_urls);
+       pm = new Fl_Menu_Item[n_it+1];
+       memset(pm, '\0', sizeof(Fl_Menu_Item[n_it+1]));
+       for (int i = 0, j = 0; i < n_it; i++) {
+          char *label, *url, *source;
+          source = (char *)dList_nth_data(prefs.search_urls, i);
+          if (a_Misc_parse_search_url(source, &label, &url) < 0)
+             continue;
+          pm[j++].label(FL_NORMAL_LABEL, strdup(label));
+       }
+    }
+    ch->tooltip("Select search engine");
+    ch->menu(pm);
+    ch->value(prefs.search_url_idx);
+    ch->textcolor(FL_DARK_BLUE);
+
     int xpos = ww-2*(gap+bw), ypos = ih+3*gap;
     Fl_Return_Button *rb = new Fl_Return_Button(xpos, ypos, bw, bh, "OK");
     rb->align(FL_ALIGN_INSIDE|FL_ALIGN_CLIP);
@@ -156,6 +196,8 @@ const char *a_Dialog_input(const char *msg)
       /* we have a string, save it */
       dFree(input_str);
       input_str = dStrdup(c_inp->value());
+      MSG("a_Dialog_input value() = %d\n", ch->value());
+      prefs.search_url_idx = ch->value();
    }
    delete window;
 

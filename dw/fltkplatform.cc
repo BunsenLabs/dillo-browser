@@ -123,7 +123,9 @@ FltkFont::FltkFont (core::style::FontAttrs *attrs)
    font = family->get (fa);
 
    fl_font(font, size);
-   spaceWidth = misc::max(0, (int)fl_width(' ') + letterSpacing);
+   /* WORKAROUND: fl_width(uint_t) is not working on non-xft X.
+    * Reported to FLTK as STR #2688 */
+   spaceWidth = misc::max(0, (int)fl_width(" ") + letterSpacing);
    int xx, xy, xw, xh;
    fl_text_extents("x", xx, xy, xw, xh);
    xHeight = xh;
@@ -159,7 +161,7 @@ void FltkFont::initSystemFonts ()
       if (t & FL_BOLD)
          strstrip(name, " bold");
 
-      MSG("Found font: %s%s%s\n", name, t & FL_BOLD ? " bold" : "",
+      _MSG("Found font: %s%s%s\n", name, t & FL_BOLD ? " bold" : "",
                                   t & FL_ITALIC ? " italic" : "");
 
       object::String *familyName = new object::String(name);
