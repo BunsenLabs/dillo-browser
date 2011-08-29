@@ -104,6 +104,7 @@ CssSelector::CssSelector () {
    cs = selectorList->getRef (selectorList->size () - 1);
 
    cs->notMatchingBefore = -1;
+   cs->combinator = CHILD;
    cs->selector = new CssSimpleSelector ();
 };
 
@@ -133,6 +134,7 @@ bool CssSelector::match (Doctree *docTree, const DoctreeNode *node) {
 
       switch (comb) {
          case CHILD:
+         case ADJACENT_SIBLING:
             if (!sel->match (node))
                return false;
             break;
@@ -156,7 +158,11 @@ bool CssSelector::match (Doctree *docTree, const DoctreeNode *node) {
       }
 
       comb = cs->combinator;
-      node = docTree->parent (node);
+
+      if (comb == ADJACENT_SIBLING)
+         node = docTree->sibling (node);
+      else 
+         node = docTree->parent (node);
    }
 
    return true;
@@ -199,6 +205,9 @@ void CssSelector::print () {
                break;
             case DESCENDANT:
                fprintf (stderr, "\" \" ");
+               break;
+            case ADJACENT_SIBLING:
+               fprintf (stderr, "+ ");
                break;
             default:
                fprintf (stderr, "? ");
@@ -489,39 +498,21 @@ void CssStyleSheet::apply (CssPropertyList *props,
    }
 }
 
-CssStyleSheet *CssContext::userAgentStyle;
-CssStyleSheet *CssContext::userStyle;
-CssStyleSheet *CssContext::userImportantStyle;
-
 CssContext::CssContext () {
    pos = 0;
 
-   for (int o = CSS_PRIMARY_USER_AGENT; o < CSS_PRIMARY_LAST; o++)
-      sheet[o] = NULL;
+   memset (sheet, 0, sizeof(sheet));
+   sheet[CSS_PRIMARY_USER_AGENT] = new CssStyleSheet ();
+   sheet[CSS_PRIMARY_USER] = new CssStyleSheet ();
+   sheet[CSS_PRIMARY_USER_IMPORTANT] = new CssStyleSheet ();
 
-   if (userAgentStyle == NULL) {
-      userAgentStyle = new CssStyleSheet ();
-      userStyle = new CssStyleSheet ();
-      userImportantStyle = new CssStyleSheet ();
-
-      sheet[CSS_PRIMARY_USER_AGENT] = userAgentStyle;
-      sheet[CSS_PRIMARY_USER] = userStyle;
-      sheet[CSS_PRIMARY_USER_IMPORTANT] = userImportantStyle;
-
-      buildUserAgentStyle ();
-      buildUserStyle ();
-   }
-
-   sheet[CSS_PRIMARY_USER_AGENT] = userAgentStyle;
-   sheet[CSS_PRIMARY_USER] = userStyle;
-   sheet[CSS_PRIMARY_USER_IMPORTANT] = userImportantStyle;
+   buildUserAgentStyle ();
+   buildUserStyle ();
 }
 
 CssContext::~CssContext () {
    for (int o = CSS_PRIMARY_USER_AGENT; o < CSS_PRIMARY_LAST; o++)
-      if (sheet[o] != userAgentStyle && sheet[o] != userStyle &&
-          sheet[o] != userImportantStyle)
-         delete sheet[o];
+      delete sheet[o];
 }
 
 /**

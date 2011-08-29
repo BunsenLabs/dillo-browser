@@ -98,7 +98,8 @@ public:
                  int angle1, int angle2);
     void drawPolygon (core::style::Color *color,
                       core::style::Color::Shading shading,
-                      bool filled, bool convex, int points[][2], int npoints);
+                      bool filled, bool convex,
+                      core::Point *points, int npoints);
 
    core::View *getClippingView (int x, int y, int width, int height);
    void mergeClippingView (core::View *clippingView);
@@ -116,6 +117,11 @@ public:
                   core::style::Color *color,
                   core::style::Color::Shading shading,
                   int x, int y, const char *text, int len);
+   void drawSimpleWrappedText (core::style::Font *font,
+                               core::style::Color *color,
+                               core::style::Color::Shading shading,
+                               int x, int y, int w, int h,
+                               const char *text);
    void drawImage (core::Imgbuf *imgbuf, int xRoot, int yRoot,
                    int x, int y, int width, int height);
 

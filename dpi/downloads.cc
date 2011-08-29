@@ -108,7 +108,8 @@ class DLItem {
    int LogPipe[2];
    char *shortname, *fullname;
    char *target_dir;
-   int log_len, log_max, log_state;
+   size_t log_len, log_max;
+   int log_state;
    char *log_text;
    time_t init_time;
    char **dl_argv;
@@ -189,6 +190,28 @@ public:
    void abort_all();
    DLAction check_filename(char **p_dl_dest);
 };
+
+/*
+ * FLTK cannot be dissuaded from interpreting '@' in a tooltip
+ * as indicating a symbol unless we escape it.
+ */
+static char *escape_tooltip(const char *buf, ssize_t len)
+{
+   if (len < 0)
+      len = 0;
+
+   char *ret = (char *) malloc(2 * len + 1);
+   char *dest = ret;
+
+   while (len-- > 0) { 
+      if (*buf == '@')
+         *dest++ = *buf;
+      *dest++ = *buf++;
+   }
+   *dest = '\0';
+
+   return ret;
+}
 
 
 /*
@@ -476,11 +499,16 @@ void DLItem::update_prSize(int newsize)
 void DLItem::log_text_add(const char *buf, ssize_t st)
 {
    const char *p;
-   char *q, *d, num[64];
+   char *esc_str, *q, *d, num[64];
+   size_t esc_len;
+
+   // WORKAROUND: We have to escape '@' in FLTK tooltips.
+   esc_str = escape_tooltip(buf, st);
+   esc_len = strlen(esc_str);
 
    // Make room...
-   if (log_len + st >= log_max) {
-      log_max = log_len + st + 1024;
+   if (log_len + esc_len >= log_max) {
+      log_max = log_len + esc_len + 1024;
       log_text = (char *) realloc (log_text, log_max);
       log_text[log_len] = 0;
       prTitle->tooltip(log_text);
@@ -488,7 +516,7 @@ void DLItem::log_text_add(const char *buf, ssize_t st)
 
    // FSM to remove wget's "dot-progress" (i.e. "^ " || "^[0-9]+K")
    q = log_text + log_len;
-   for (p = buf; (p - buf) < st; ++p) {
+   for (p = esc_str; (size_t)(p - esc_str) < esc_len; ++p) {
       switch (log_state) {
       case ST_newline:
          if (*p == ' ') {
@@ -522,6 +550,8 @@ void DLItem::log_text_add(const char *buf, ssize_t st)
    }
    *q = 0;
    log_len = strlen(log_text);
+
+   free(esc_str);
 
    // Now scan for the length of the file
    if (total_bytesize == -1) {
@@ -1092,6 +1122,29 @@ DLWin::DLWin(int ww, int wh) {
 
 // ---------------------------------------------------------------------------
 
+/*
+ * Set FL_NORMAL_LABEL to interpret neither symbols (@) nor shortcuts (&)
+ */
+static void custLabelDraw(const Fl_Label* o, int X, int Y, int W, int H,
+                          Fl_Align align)
+{
+   const int interpret_symbols = 0;
+
+   fl_draw_shortcut = 0;
+   fl_font(o->font, o->size);
+   fl_color((Fl_Color)o->color);
+   fl_draw(o->value, X, Y, W, H, align, o->image, interpret_symbols);
+}
+
+static void custLabelMeasure(const Fl_Label* o, int& W, int& H)
+{
+   const int interpret_symbols = 0;
+
+   fl_draw_shortcut = 0;
+   fl_font(o->font, o->size);
+   fl_measure(o->value, W, H, interpret_symbols);
+}
+ 
 
 
 //int main(int argc, char **argv)
@@ -1100,6 +1153,9 @@ int main()
    int ww = 420, wh = 85;
 
    Fl::lock();
+
+   // Disable '@' and '&' interpretation in normal labels.
+   Fl::set_labeltype(FL_NORMAL_LABEL, custLabelDraw, custLabelMeasure);
 
    // Create the download window
    dl_win = new DLWin(ww, wh);

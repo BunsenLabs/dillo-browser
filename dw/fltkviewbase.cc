@@ -471,14 +471,14 @@ void FltkViewBase::drawArc (core::style::Color *color,
    int x = translateCanvasXToViewX (centerX) - width / 2;
    int y = translateCanvasYToViewY (centerY) - height / 2;
 
-   fl_arc(x, y, width, height, 0.0, 360.0);
+   fl_arc(x, y, width, height, angle1, angle2);
    if (filled)
-      fl_pie(x, y, width, height, 0.0, 360.0);
+      fl_pie(x, y, width, height, angle1, angle2);
 }
 
 void FltkViewBase::drawPolygon (core::style::Color *color,
                                 core::style::Color::Shading shading,
-                                bool filled, bool convex, int points[][2],
+                                bool filled, bool convex, core::Point *points,
                                 int npoints)
 {
    if (npoints > 0) {
@@ -493,8 +493,8 @@ void FltkViewBase::drawPolygon (core::style::Color *color,
          fl_begin_loop();
 
       for (int i = 0; i < npoints; i++) {
-         fl_vertex(translateCanvasXToViewX(points[i][0]),
-                   translateCanvasYToViewY(points[i][1]));
+         fl_vertex(translateCanvasXToViewX(points[i].x),
+                   translateCanvasYToViewY(points[i].y));
       }
       if (filled) {
          if (convex)
@@ -580,6 +580,24 @@ void FltkWidgetView::drawText (core::style::Font *font,
          }
       }
    }
+}
+
+/*
+ * "simple" in that it ignores letter-spacing, etc. This was added for image
+ * alt text where none of that matters.
+ */
+void FltkWidgetView::drawSimpleWrappedText (core::style::Font *font,
+                                            core::style::Color *color,
+                                           core::style::Color::Shading shading,
+                                            int X, int Y, int W, int H,
+                                            const char *text)
+{
+   FltkFont *ff = (FltkFont*)font;
+   fl_font(ff->font, ff->size);
+   fl_color(((FltkColor*)color)->colors[shading]);
+   fl_draw(text,
+           translateCanvasXToViewX (X), translateCanvasYToViewY (Y),
+           W, H, FL_ALIGN_TOP|FL_ALIGN_LEFT|FL_ALIGN_WRAP, NULL, 0);
 }
 
 void FltkWidgetView::drawImage (core::Imgbuf *imgbuf, int xRoot, int yRoot,
