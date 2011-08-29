@@ -365,7 +365,7 @@ static void Http_send_query(ChainLink *Info, SocketData_t *S)
    DataBuf *dbuf;
 
    /* Create the query */
-   query = a_Http_make_query_str(S->web->url, S->flags & HTTP_SOCKET_USE_PROXY);
+   query = a_Http_make_query_str(S->web->url,S->flags & HTTP_SOCKET_USE_PROXY);
    dbuf = a_Chain_dbuf_new(query->str, query->len, 0);
 
    /* actually this message is sent too early.

@@ -154,33 +154,6 @@ int CustInput::handle(int e)
 //----------------------------------------------------------------------------
 
 /*
- * A button that highlights on mouse over
- */
-class CustLightButton : public Fl_Button {
-   Fl_Color norm_color;
-public:
-   CustLightButton(int x, int y, int w, int h, const char *l=0) :
-      Fl_Button(x,y,w,h,l) { norm_color = color(); };
-   virtual int handle(int e);
-};
-
-int CustLightButton::handle(int e)
-{
-   if (active()) {
-      if (e == FL_ENTER) {
-         color(51); // {17,26,51}
-         redraw();
-      } else if (e == FL_LEAVE || e == FL_RELEASE) {
-         color(norm_color);
-         redraw();
-      }
-   }
-   return Fl_Button::handle(e);
-}
-
-//----------------------------------------------------------------------------
-
-/*
  * Used to handle "paste" within the toolbar's Clear button.
  */
 class CustPasteButton : public CustLightButton {
@@ -221,8 +194,6 @@ public:
          padding = w > 2 ? w/2 : 1;
       }
       copy_label(lbl);
-      //measure_label(w,h);
-      //size(w+padding,this->h());
    }
 };
 
@@ -303,16 +274,6 @@ static void clear_cb(Fl_Widget *w, void *data)
 }
 
 /*
- * Change the color of the location bar.
- *
-static void color_change_cb(Fl_Widget *wid, void *data)
-{
-   ((UI*)data)->color_change_cb_i();
-}
- */
-
-
-/*
  * Send the browser to the new URL in the location.
  */
 static void location_cb(Fl_Widget *wid, void *data)
@@ -323,9 +284,8 @@ static void location_cb(Fl_Widget *wid, void *data)
    _MSG("location_cb()\n");
    a_UIcmd_open_urlstr(a_UIcmd_get_bw_by_widget(i), i->value());
 
-   if (ui->get_panelmode() == UI_TEMPORARILY_SHOW_PANELS) {
-      ui->set_panelmode(UI_HIDDEN);
-   }
+   if (ui->temporaryPanels())
+      ui->panels_toggle();
 }
 
 
@@ -537,11 +497,11 @@ Fl_Widget *UI::make_filemenu_button()
    padding = w;
    btn->copy_label(PanelSize == P_tiny ? "&F" : "&File");
    btn->measure_label(w,h);
-   h = (PanelSize == P_large) ? mh : (PanelSize == P_tiny) ? bh : lh;
+   h = (PanelSize == P_tiny) ? bh : lh;
    btn->size(w+padding, h);
    p_xpos += btn->w();
    _MSG("UI::make_filemenu_button w=%d h=%d padding=%d\n", w, h, padding);
-   btn->box(PanelSize == P_large ? FL_THIN_UP_BOX : FL_THIN_UP_BOX);
+   btn->box(FL_THIN_UP_BOX);
    btn->callback(filemenu_cb, this);
    if (prefs.show_tooltip)
       btn->tooltip("File menu");
@@ -581,11 +541,6 @@ void UI::make_panel(int ww)
          bw = 42, bh = 36, mh = 0, lh = 22, lbl = 1;
       else
          bw = 45, bh = 45, mh = 0, lh = 28, lbl = 1;
-   } else {   // P_large
-      if (Small_Icons)
-         bw = 42, bh = 36, mh = 22, lh = 22, lbl = 1;
-      else
-         bw = 45, bh = 45, mh = 24, lh = 28, lbl = 1;
    }
    nh = bh, fh = 28; sh = 20;
 
@@ -604,36 +559,17 @@ void UI::make_panel(int ww)
       NavBar->rearrange();
       TopGroup->insert(*NavBar,0);
    } else {
-       if (PanelSize == P_large) {
-          MenuBar = new CustGroupHorizontal(0,0,ww,mh);
-          MenuBar->begin();
-           MenuBar->box(FL_THIN_UP_BOX);
-           Fl_Widget *bn = make_filemenu_button();
-           MenuBar->add_resizable(*new Fl_Box(bn->w(),0,ww - bn->w(),mh));
-          MenuBar->end();
-          MenuBar->rearrange();
-          TopGroup->insert(*MenuBar,0);
-
-          p_xpos = 0;
-          LocBar = new CustGroupHorizontal(0,0,ww,lh);
-          LocBar->begin();
-           make_location(ww);
-           LocBar->resizable(Location);
-          LocBar->end();
-          LocBar->rearrange();
-          TopGroup->insert(*LocBar,1);
-       } else {
-          LocBar = new CustGroupHorizontal(0,0,ww,lh);
-          LocBar->box(FL_NO_BOX);
-          LocBar->begin();
-           p_xpos = 0;
-           make_filemenu_button();
-           make_location(ww);
-           LocBar->resizable(Location);
-          LocBar->end();
-          LocBar->rearrange();
-          TopGroup->insert(*LocBar,0);
-       }
+       // Location
+       LocBar = new CustGroupHorizontal(0,0,ww,lh);
+       LocBar->box(FL_NO_BOX);
+       LocBar->begin();
+        p_xpos = 0;
+        make_filemenu_button();
+        make_location(ww);
+        LocBar->resizable(Location);
+       LocBar->end();
+       LocBar->rearrange();
+       TopGroup->insert(*LocBar,0);
 
        // Toolbar
        p_ypos = 0;
@@ -652,7 +588,7 @@ void UI::make_panel(int ww)
         }
        NavBar->end();
        NavBar->rearrange();
-       TopGroup->insert(*NavBar,(MenuBar ? 2 : 1));
+       TopGroup->insert(*NavBar,1);
    }
 }
 
@@ -694,9 +630,7 @@ void UI::make_status_bar(int ww, int wh)
 UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
   CustGroupVertical(x, y, ui_w, ui_h, label)
 {
-   PointerOnLink = FALSE;
-
-   MenuBar = LocBar = NavBar = StatusBar = NULL;
+   LocBar = NavBar = StatusBar = NULL;
 
    Tabs = NULL;
    TabTooltip = NULL;
@@ -704,18 +638,14 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
    TopGroup->box(FL_NO_BOX);
    clear_flag(SHORTCUT_LABEL);
 
+   PanelTemporary = false;
    if (cur_ui) {
       PanelSize = cur_ui->PanelSize;
       CuteColor = cur_ui->CuteColor;
       Small_Icons = cur_ui->Small_Icons;
-      if (cur_ui->Panelmode == UI_HIDDEN ||
-          cur_ui->Panelmode == UI_TEMPORARILY_SHOW_PANELS)
-         Panelmode = UI_HIDDEN;
-      else
-         Panelmode = UI_NORMAL;
+      Panelmode = cur_ui->Panelmode;
    } else {
      // Set some default values
-     //PanelSize = P_tiny, CuteColor = 26, Small_Icons = 0;
      PanelSize = prefs.panel_size;
      Small_Icons = prefs.small_icons;
      CuteColor = 206;
@@ -740,7 +670,6 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
     MainIdx = TopGroup->find(Main);
 
     // Find text bar
-    FindBarSpace = 1;
     FindBar = new Findbar(ui_w, fh);
     TopGroup->add(FindBar);
 
@@ -749,13 +678,6 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
     TopGroup->add(StatusBar);
    TopGroup->end();
    TopGroup->rearrange();
-
-   // Make the full screen button (to be attached to the viewport later)
-   // TODO: attach to the viewport
-   //FullScreen = new Fl_Button(0,0,15,15);
-   //FullScreen->image(ImgFullScreenOn);
-   //FullScreen->tooltip("Hide Controls");
-   //FullScreen->callback(fullscreen_cb, this);
 
    customize(0);
 
@@ -771,9 +693,6 @@ UI::~UI()
 {
    _MSG("UI::~UI()\n");
    dFree(TabTooltip);
-
-   if (!FindBarSpace)
-      delete FindBar;
 }
 
 /*
@@ -788,10 +707,11 @@ int UI::handle(int event)
       /* WORKAROUND: remove the Panel's fltk-tooltip.
        * Although the expose event is delivered, it has an offset. This
        * extra call avoids the lingering tooltip. */
-      if (Fl::event_inside(NavBar) ||
-          (LocBar && Fl::event_inside(LocBar)) ||
-          (MenuBar && Fl::event_inside(MenuBar)) ||
-          (StatusBar && Fl::event_inside(StatusBar)))
+      if (!Fl::event_inside(Main) &&
+          (Fl::event_inside((Fl_Widget*)tabs()) ||
+           Fl::event_inside(NavBar) ||
+           (LocBar && Fl::event_inside(LocBar)) ||
+           (StatusBar && Fl::event_inside(StatusBar))))
          window()->damage(FL_DAMAGE_EXPOSE,0,0,1,1);
 
       return 0; // Receive as shortcut
@@ -821,14 +741,17 @@ int UI::handle(int event)
          a_UIcmd_search_dialog(a_UIcmd_get_bw_by_widget(this));
          ret = 1;
       } else if (cmd == KEYS_GOTO) {
+         if (Panelmode == UI_HIDDEN) {
+            panels_toggle();
+            temporaryPanels(true);
+         }
          focus_location();
          ret = 1;
       } else if (cmd == KEYS_HIDE_PANELS) {
          /* Hide findbar if present, hide panels if not */
-         (FindBarSpace) ? findbar_toggle(0) : panels_toggle();
+         (FindBar->visible()) ? findbar_toggle(0) : panels_toggle();
+         temporaryPanels(false);
          ret = 1;
-         //if (get_panelmode() == UI_TEMPORARILY_SHOW_PANELS)
-         //   set_panelmode(UI_HIDDEN);
       } else if (cmd == KEYS_OPEN) {
          a_UIcmd_open_file(a_UIcmd_get_bw_by_widget(this));
          ret = 1;
@@ -898,10 +821,6 @@ void UI::set_location(const char *str)
  */
 void UI::focus_location()
 {
-   if (get_panelmode() == UI_HIDDEN) {
-      // Temporary panel handling is disabled now.
-      //set_panelmode(UI_TEMPORARILY_SHOW_PANELS);
-   }
    Location->take_focus();
    // Make text selected when already focused.
    Location->position(Location->size(), 0);
@@ -1038,13 +957,11 @@ void UI::change_panel(int new_size, int small_icons)
 {
    // Remove current panel's bars
    init_sizes();
-   TopGroup->remove(MenuBar);
-   Fl::delete_widget(MenuBar);
    TopGroup->remove(LocBar);
    Fl::delete_widget(LocBar);
    TopGroup->remove(NavBar);
    Fl::delete_widget(NavBar);
-   MenuBar = LocBar = NavBar = NULL;
+   LocBar = NavBar = NULL;
 
    // Set internal vars for panel size
    PanelSize = new_size;
@@ -1075,39 +992,6 @@ void UI::color_change_cb_i()
 }
 
 /*
- * Set or remove the Panelmode flag and update the UI accordingly
- */
-void UI::set_panelmode(UIPanelmode mode)
-{
-   if (mode == UI_HIDDEN) {
-      //Panel->hide();
-      StatusBar->hide();
-   } else {
-      /* UI_NORMAL or UI_TEMPORARILY_SHOW_PANELS */
-      //Panel->show();
-      StatusBar->show();
-   }
-   Panelmode = mode;
-   TopGroup->rearrange();
-}
-
-/*
- * Get the value of the panelmode flag
- */
-UIPanelmode UI::get_panelmode()
-{
-   return Panelmode;
-}
-
-/*
- * Toggle the Control Panel out of the way
- */
-void UI::panelmode_cb_i()
-{
-   set_panelmode((UIPanelmode) !Panelmode);
-}
-
-/*
  * Set 'nw' as the main render area widget
  */
 void UI::set_render_layout(Fl_Group *nw)
@@ -1130,15 +1014,12 @@ void UI::button_set_sens(UIButton btn, int sens)
    switch (btn) {
    case UI_BACK:
       (sens) ? Back->activate() : Back->deactivate();
-//    Back->redraw(DAMAGE_HIGHLIGHT);
       break;
    case UI_FORW:
       (sens) ? Forw->activate() : Forw->deactivate();
-//    Forw->redraw(DAMAGE_HIGHLIGHT);
       break;
    case UI_STOP:
       (sens) ? Stop->activate() : Stop->deactivate();
-//    Stop->redraw(DAMAGE_HIGHLIGHT);
       break;
    default:
       break;
@@ -1160,27 +1041,23 @@ void UI::findbar_toggle(bool add)
 {
    /* WORKAROUND:
     * This is tricky: As fltk-1.3 resizes hidden widgets (which it
-    * doesn't resize when visible!). We need to go through hoops to
+    * doesn't resize when visible!). We need to set the size to (0,0) to
     * get the desired behaviour.
     * (STR#2639 in FLTK bug tracker).
     */
 
    if (add) {
-      if (!FindBarSpace) {
-         // show
-         Main->size(Main->w(), Main->h()-FindBar->h());
-         insert(*FindBar, StatusBar);
-         FindBar->show();
-         FindBarSpace = 1;
-      } else {
-         // select text
-         FindBar->show();
-      }
-   } else if (!add && FindBarSpace) {
+      if (!FindBar->visible())
+         FindBar->size(w(), fh);
+      FindBar->show();
+   } else {
       // hide
-      Main->size(Main->w(), Main->h()+FindBar->h());
-      remove(FindBar);
-      FindBarSpace = 0;
+      FindBar->size(0,0);
+      FindBar->hide();
+      // reset state
+      a_UIcmd_findtext_reset(a_UIcmd_get_bw_by_widget(this));
+      // focus main area
+      focus_main();
    }
    TopGroup->rearrange();
 }
@@ -1197,10 +1074,6 @@ void UI::panels_toggle()
 
    // hide/show panels
    init_sizes();
-   if (MenuBar) {
-      hide ? MenuBar->size(0,0) : MenuBar->size(w(),mh);
-      hide ? MenuBar->hide() : MenuBar->show();
-   }
    if (LocBar) {
       hide ? LocBar->size(0,0) : LocBar->size(w(),lh);
       hide ? LocBar->hide() : LocBar->show();
@@ -1216,4 +1089,5 @@ void UI::panels_toggle()
    }
 
    TopGroup->rearrange();
+   Panelmode = (hide) ? UI_HIDDEN : UI_NORMAL;
 }

@@ -26,6 +26,15 @@
 #include <stdio.h>
 #include <limits.h>
 
+/*
+ * Local variables
+ */
+ /* The tooltip under mouse pointer in current textblock. No ref. hold.
+  * (having one per view looks not worth the extra clutter). */
+static dw::core::style::Tooltip *hoverTooltip = NULL;
+
+
+
 using namespace lout;
 
 namespace dw {
@@ -80,8 +89,6 @@ Textblock::Textblock (bool limitTextWidth)
    availAscent = 100;
    availDescent = 0;
 
-   hoverTooltip = NULL;
-
    this->limitTextWidth = limitTextWidth;
 
    for (int layer = 0; layer < core::HIGHLIGHT_NUM_LAYERS; layer++) {
@@ -95,7 +102,10 @@ Textblock::Textblock (bool limitTextWidth)
 
 Textblock::~Textblock ()
 {
-   //_MSG ("Textblock::~Textblock\n");
+   _MSG("Textblock::~Textblock\n");
+
+   /* make sure not to call a free'd tooltip (very fast overkill) */
+   hoverTooltip = NULL;
 
    for (int i = 0; i < words->size(); i++) {
       Word *word = words->getRef (i);
@@ -366,13 +376,13 @@ void Textblock::sizeAllocateImpl (core::Allocation *allocation)
              * http://www.dillo.org/test/img/ */
             childAllocation.y =
                lineYOffsetCanvasAllocation (line, allocation)
-               + (line->boxAscent - word->size.ascent);
-               // - word->content.widget->getStyle()->margin.top;
+               + (line->boxAscent - word->size.ascent)
+               - word->content.widget->getStyle()->margin.top;
             childAllocation.width = word->size.width;
-            childAllocation.ascent = word->size.ascent;
-               // + word->content.widget->getStyle()->margin.top;
-            childAllocation.descent = word->size.descent;
-               // + word->content.widget->getStyle()->margin.bottom;
+            childAllocation.ascent = word->size.ascent
+               + word->content.widget->getStyle()->margin.top;
+            childAllocation.descent = word->size.descent
+               + word->content.widget->getStyle()->margin.bottom;
 
             oldChildAllocation = word->content.widget->getAllocation();
 
@@ -536,6 +546,11 @@ bool Textblock::buttonReleaseImpl (core::EventButton *event)
    return sendSelectionEvent (core::SelectionState::BUTTON_RELEASE, event);
 }
 
+/*
+ * Handle motion inside the widget
+ * (special care is necessary when switching from another widget,
+ *  because hoverLink and hoverTooltip are meaningless then).
+ */
 bool Textblock::motionNotifyImpl (core::EventMotion *event)
 {
    if (event->state & core::BUTTON1_MASK)
@@ -557,6 +572,7 @@ bool Textblock::motionNotifyImpl (core::EventMotion *event)
          hoverLink = style->x_link;
          hoverTooltip = style->x_tooltip;
       }
+
       // Show/hide tooltip
       if (tooltipOld != hoverTooltip) {
          if (tooltipOld)
@@ -566,21 +582,32 @@ bool Textblock::motionNotifyImpl (core::EventMotion *event)
       } else if (hoverTooltip)
          hoverTooltip->onMotion ();
 
-      if (hoverLink != linkOld)
+      _MSG("MN tb=%p tooltipOld=%p hoverTooltip=%p\n",
+          this, tooltipOld, hoverTooltip);
+      if (hoverLink != linkOld) {
+         /* LinkEnter with hoverLink == -1 is the same as LinkLeave */
          return layout->emitLinkEnter (this, hoverLink, -1, -1, -1);
-      else
+      } else {
          return hoverLink != -1;
+      }
    }
 }
 
 void Textblock::enterNotifyImpl (core::EventCrossing *event)
 {
+   _MSG(" tb=%p, ENTER NotifyImpl hoverTooltip=%p\n", this, hoverTooltip);
+   /* reset hoverLink so linkEnter is detected */
+   hoverLink = -2;
 }
 
 void Textblock::leaveNotifyImpl (core::EventCrossing *event)
 {
-   hoverLink = -1;
-   (void) layout->emitLinkEnter (this, hoverLink, -1, -1, -1);
+   _MSG(" tb=%p, LEAVE NotifyImpl: hoverTooltip=%p\n", this, hoverTooltip);
+
+   /* leaving the viewport can't be handled by motionNotifyImpl() */
+   if (hoverLink >= 0)
+      layout->emitLinkEnter (this, -1, -1, -1, -1);
+
    if (hoverTooltip) {
       hoverTooltip->onLeave();
       hoverTooltip = NULL;
@@ -963,29 +990,29 @@ void Textblock::wordWrap(int wordIndex)
    //                    lastLine->boxDescent);
 
    if (word->content.type == core::Content::WIDGET) {
+      int collapseMarginTop = 0;
+
       lastLine->marginDescent =
          misc::max (lastLine->marginDescent,
                     word->size.descent +
                     word->content.widget->getStyle()->margin.bottom);
 
-      //DBG_OBJ_ARRSET_NUM (page, "lines.%d.descent", page->num_lines - 1,
-      //                    lastLine->descent);
-
-      /* If the widget is not in the first line of the paragraph, its top
-       * margin may make the line higher.
-       */
-      if (lines->size () > 1) {
-         /* Here, we know already what the break and the bottom margin
-          * contributed to the space before this line.
-          */
-         lastLine->boxAscent =
-            misc::max (lastLine->boxAscent,
-                       word->size.ascent
-                       + word->content.widget->getStyle()->margin.top);
-
-         //DBG_OBJ_ARRSET_NUM (page, "lines.%d.ascent", page->num_lines - 1,
-         //                    lastLine->boxAscent);
+      if (lines->size () == 1 &&
+          word->content.widget->blockLevel () &&
+          getStyle ()->borderWidth.top == 0 &&
+          getStyle ()->padding.top == 0) {
+         // collapse top margin of parent element with top margin of first child
+         // see: http://www.w3.org/TR/CSS21/box.html#collapsing-margins
+         collapseMarginTop = getStyle ()->margin.top;
       }
+
+      lastLine->boxAscent =
+            misc::max (lastLine->boxAscent,
+                       word->size.ascent,
+                       word->size.ascent
+                       + word->content.widget->getStyle()->margin.top
+                       - collapseMarginTop);
+
    } else {
       lastLine->marginDescent =
          misc::max (lastLine->marginDescent, lastLine->boxDescent);
@@ -1096,11 +1123,7 @@ void Textblock::calcWidgetSize (core::Widget *widget, core::Requisition *size)
       widget->setAscent (availAscent);
       widget->setDescent (availDescent);
       widget->sizeRequest (size);
-//      size->ascent -= wstyle->margin.top;
-//      size->descent -= wstyle->margin.bottom;
    } else {
-      /* TODO: Use margin.{top|bottom} here, like above.
-       * (No harm for the next future.) */
       if (wstyle->width == core::style::LENGTH_AUTO ||
           wstyle->height == core::style::LENGTH_AUTO)
          widget->sizeRequest (&requisition);
@@ -1131,6 +1154,10 @@ void Textblock::calcWidgetSize (core::Widget *widget, core::Requisition *size)
          size->descent = (int) (len * availDescent);
       }
    }
+
+   /* ascent and descent in words do not contain margins. */
+   size->ascent -= wstyle->margin.top;
+   size->descent -= wstyle->margin.bottom;
 }
 
 /**

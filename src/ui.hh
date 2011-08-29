@@ -28,22 +28,27 @@ typedef enum {
 
 typedef enum {
    UI_NORMAL = 0,     /* make sure it's compatible with bool */
-   UI_HIDDEN = 1,
-   UI_TEMPORARILY_SHOW_PANELS
+   UI_HIDDEN = 1
 } UIPanelmode;
+
+
+// Min size to fit the full UI
+#define UI_MIN_W 600
+#define UI_MIN_H 200
 
 // Private classes
 class CustProgressBox;
 class CustTabs;
 
 
-// Class definition ----------------------------------------------------------
+// Class definitions ---------------------------------------------------------
 /*
  * Used to reposition group's widgets when some of them are hidden.
  * All children get the height of the group but retain their original width.
  * The resizable child get's the remaining space.
  */
 class CustGroupHorizontal : public Fl_Group {
+   Fl_Widget *rsz;
 public:
   CustGroupHorizontal(int x,int y,int w ,int h,const char *l = 0) :
     Fl_Group(x,y,w,h,l) { };
@@ -53,13 +58,24 @@ public:
      int sum = 0, _x = x();
      int children_ = children();
 
+     if (resizable())
+        rsz = resizable();
+
      for (int i=0; i < children_; i++)
         if (a[i] != resizable() && a[i]->visible())
            sum += a[i]->w();
 
      for (int i=0; i < children_; i++) {
-        if (a[i] == resizable()) {
-           a[i]->resize(_x, y(), w() - sum, h());
+        if (a[i] == rsz) {
+           if (w() > sum) {
+              a[i]->resize(_x, y(), w()-sum, h());
+              if (!resizable())
+                 resizable(rsz);
+           } else {
+              /* widgets overflow width */
+              a[i]->resize(_x, y(), 0, h());
+              resizable(NULL);
+           }
         } else {
            a[i]->resize(_x, y(), a[i]->w(), h());
         }
@@ -99,6 +115,32 @@ public:
   }
 };
 
+/*
+ * A button that highlights on mouse over
+ */
+class CustLightButton : public Fl_Button {
+   Fl_Color norm_color, light_color;
+public:
+   CustLightButton(int x, int y, int w, int h, const char *l=0) :
+      Fl_Button(x,y,w,h,l) { norm_color = color(); light_color = 51; };
+   virtual int handle(int e)
+   {
+      if (active()) {
+         if (e == FL_ENTER) {
+            color(light_color); // {17,26,51}
+            redraw();
+         } else if (e == FL_LEAVE || e == FL_RELEASE || e == FL_HIDE) {
+            color(norm_color);
+            redraw();
+         }
+      } else if (e == FL_DEACTIVATE && color() != norm_color) {
+         color(norm_color);
+         redraw();
+      }
+      return Fl_Button::handle(e);
+   }
+   void hl_color(Fl_Color col) { light_color = col; };
+};
 
 //
 // UI class definition -------------------------------------------------------
@@ -109,21 +151,21 @@ class UI : public CustGroupVertical {
 
    CustGroupVertical *TopGroup;
    Fl_Button *Back, *Forw, *Home, *Reload, *Save, *Stop, *Bookmarks, *Tools,
-          *Clear, *Search, *Help, *FullScreen, *BugMeter, *FileButton;
-   CustGroupHorizontal *MenuBar, *LocBar, *NavBar, *StatusBar;
+          *Clear, *Search, *Help, *BugMeter, *FileButton;
+   CustGroupHorizontal *LocBar, *NavBar, *StatusBar;
    Fl_Input  *Location;
    CustProgressBox *PProg, *IProg;
    Fl_Group *Panel, *Main;
    Fl_Output *StatusOutput;
    Findbar *FindBar;
 
-   int FindBarSpace, MainIdx;
+   int MainIdx;
    // Panel customization variables
    int PanelSize, CuteColor, Small_Icons;
    int p_xpos, p_ypos, bw, bh, mh, lh, nh, fh, sh, pw, lbl;
+   bool PanelTemporary;
 
    UIPanelmode Panelmode;
-   int PointerOnLink;
    Fl_Button *make_button(const char *label, Fl_Image *img,
                           Fl_Image*deimg, int b_n, int start = 0);
    void make_toolbar(int tw, int th);
@@ -154,8 +196,6 @@ public:
    void customize(int flags);
    void button_set_sens(UIButton btn, int sens);
    void paste_url();
-   void set_panelmode(UIPanelmode mode);
-   UIPanelmode get_panelmode();
    int get_panelsize() { return PanelSize; }
    int get_smallicons() { return Small_Icons; }
    void change_panel(int new_size, int small_icons);
@@ -164,13 +204,12 @@ public:
 
    CustTabs *tabs() { return Tabs; }
    void tabs(CustTabs *tabs) { Tabs = tabs; }
-   int pointerOnLink() { return PointerOnLink; }
-   void pointerOnLink(int flag) { PointerOnLink = flag; }
+   bool temporaryPanels() { return PanelTemporary; }
+   void temporaryPanels(bool val) { PanelTemporary = val; }
 
    // Hooks to method callbacks
    void color_change_cb_i();
    void toggle_cb_i();
-   void panelmode_cb_i();
 };
 
 #endif // __UI_HH__
