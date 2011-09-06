@@ -232,7 +232,7 @@ int FltkViewport::handle (int event)
       /* When the viewport has focus (and not one of its children), FLTK
        * sends the event here. Returning zero tells FLTK to resend the
        * event as SHORTCUT, which we finally route to the parent. */
-       
+
       /* As we don't know the exact keybindings set by the user, we ask
        * for all of them (except Tab to keep form navigation). */
       if (Fl::event_key() != FL_Tab)
@@ -295,15 +295,13 @@ int FltkViewport::handle (int event)
 
    case FL_RELEASE:
       if (Fl::event_button() == FL_MIDDLE_MOUSE) {
-         dragScrolling = 0;
          setCursor (core::style::CURSOR_DEFAULT);
-      } else if (verScrolling && vscrollbar->handle(event)) {
-         verScrolling = 0;
-         return 1;
-      } else if (horScrolling && hscrollbar->handle(event)) {
-         horScrolling = 0;
-         return 1;
+      } else if (verScrolling) {
+         vscrollbar->handle(event);
+      } else if (horScrolling) {
+         hscrollbar->handle(event);
       }
+      horScrolling = verScrolling = dragScrolling = 0;
       break;
 
    case FL_ENTER:
