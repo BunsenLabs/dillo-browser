@@ -23,7 +23,7 @@ config.h.in.backup:
 	[ -f config.h.in.backup ] || cp -pv config.h.in config.h.in.backup
 config.status: config.h.in.backup
 	dh_testdir
-	./autogen.sh
+#	./autogen.sh
 	./configure $(CONFFLAGS) \
 				--prefix=/usr \
 				--sysconfdir=/etc \
@@ -44,7 +44,7 @@ clean-patched:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp configure-stamp
-	[ ! -f Makefile ] || $(MAKE) distclean
+	[ ! -f Makefile ] || $(MAKE) clean
 	-rm -f `find . -name "*~"`
 	-rm -rf debian/dillo debian/files* core debian/substvars debian/prerm.debhelper debian/*postinst.debhelper debian/*postrm.debhelper
 	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`

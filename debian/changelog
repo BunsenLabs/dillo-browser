@@ -1,3 +1,10 @@
+dillo (3.0~rc2-1) unstable; urgency=low
+
+  * New upstream release candidate
+  * No more run autogen.sh and make distclean
+
+ -- Axel Beckert <abe@debian.org>  Mon, 29 Aug 2011 23:38:28 +0200
+
 dillo (3~hg20110824-1) experimental; urgency=low
 
   * New upstream snapshot (r2149:9d1ff8be799c)
