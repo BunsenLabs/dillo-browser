@@ -1,7 +1,16 @@
-dillo (3.0~rc2-1) unstable; urgency=low
+dillo (3.0~rc3-1) experimental; urgency=low
 
   * New upstream release candidate
-  * No more run autogen.sh and make distclean
+    - Remove doc/CCCwork.txt from debian/docs (not included in upstream
+      tar ball)
+  * Use dh_autotools-dev_*config instead of autogen.sh as the latter is
+    not included in the official upstream tar balls.
+    - No more remove autoconf/automake generated files
+    - Remove build-dependencies on automake and autoconf
+    - Some more finetuning of what's removed in the clean target and
+      what's backed up before and restored and after the build.
+  * Switch to Debian source package format to "3.0 (quilt)" because the
+    upstream tar ball is bzip2 compressed.
 
  -- Axel Beckert <abe@debian.org>  Mon, 29 Aug 2011 23:38:28 +0200
 

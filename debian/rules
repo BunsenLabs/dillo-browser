@@ -23,7 +23,7 @@ config.h.in.backup:
 	[ -f config.h.in.backup ] || cp -pv config.h.in config.h.in.backup
 config.status: config.h.in.backup
 	dh_testdir
-#	./autogen.sh
+	dh_autotools-dev_updateconfig
 	./configure $(CONFFLAGS) \
 				--prefix=/usr \
 				--sysconfdir=/etc \
@@ -44,15 +44,17 @@ clean-patched:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp configure-stamp
-	[ ! -f Makefile ] || $(MAKE) clean
+	[ ! -f Makefile ] || $(MAKE) distclean
 	-rm -f `find . -name "*~"`
 	-rm -rf debian/dillo debian/files* core debian/substvars debian/prerm.debhelper debian/*postinst.debhelper debian/*postrm.debhelper
 	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`
 	-rm -f `find . -name "*.gmo"` src/dillo dpid/dpid config/dillocfg
-	-rm -f `find . -name "Makefile.in"` config.guess config.sub configure
-	-rm -f depcomp install-sh missing aclocal.m4 debian/dillo.png
+	-rm -f config.log debian/dillo.png
+	#-rm -f `find . -name "Makefile.in"` config.guess config.sub configure
+	#-rm -f depcomp install-sh missing aclocal.m4 debian/dillo.png
 	[ ! -f Makefile ] || $(MAKE) clean
 	[ ! -f config.h.in.backup ] || mv -v config.h.in.backup config.h.in
+	dh_autotools-dev_restoreconfig
 	dh_clean
 
 install: build
