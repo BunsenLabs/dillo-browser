@@ -1,3 +1,10 @@
+dillo (3.0-1) unstable; urgency=low
+
+  * New upstream release (3.0rc3 has been released unchanged as 3.0;
+    upload to unstable)
+
+ -- Axel Beckert <abe@debian.org>  Fri, 09 Sep 2011 01:10:40 +0200
+
 dillo (3.0~rc3-1) experimental; urgency=low
 
   * New upstream release candidate
