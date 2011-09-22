@@ -107,7 +107,7 @@ public:
       Fl_Group(0,0,ww,th,lbl) {
       Pack = NULL;
       tab_w = 50, tab_h = th, ctab_h = 1, btn_w = 20, ctl_w = 1*btn_w+2;
-      tabcolor_active = FL_DARK_CYAN; tabcolor_inactive = 206;
+      tabcolor_active = 0x87aca700; tabcolor_inactive = 0xb7beb700;
       resize(0,0,ww,ctab_h);
       /* tab buttons go inside a pack within a scroll */
       Scroll = new Fl_Scroll(0,0,ww-ctl_w,ctab_h);
@@ -123,7 +123,7 @@ public:
       /* control buttons go inside a group */
       Control = new Fl_Group(ww-ctl_w,0,ctl_w,ctab_h);
        CloseBtn = new CustLightButton(ww-ctl_w+2,0,btn_w,ctab_h, "X");
-       CloseBtn->box(FL_PLASTIC_ROUND_UP_BOX);
+       CloseBtn->box(FL_THIN_UP_BOX);
        CloseBtn->labelcolor(0x00641000);
        CloseBtn->hl_color(FL_WHITE);
        CloseBtn->clear_visible_focus();
@@ -252,7 +252,7 @@ UI *CustTabs::add_new_tab(UI *old_ui, int focus)
    btn->labelsize(btn->labelsize()-2);
    btn->copy_label(DEFAULT_TAB_LABEL);
    btn->clear_visible_focus();
-   btn->box(FL_PLASTIC_ROUND_UP_BOX);
+   btn->box(FL_GTK_THIN_UP_BOX);
    btn->color(focus ? tabcolor_active : tabcolor_inactive);
    btn->ui(new_ui);
    btn->callback(tab_btn_cb, this);
@@ -433,7 +433,7 @@ static void win_cb (Fl_Widget *w, void *cb_data) {
    CustTabs *tabs = (CustTabs*) cb_data;
    int choice = 1, ntabs = tabs->num_tabs();
 
-   if (ntabs > 1)
+   if (prefs.show_quit_dialog && ntabs > 1)
       choice = a_Dialog_choice5("Window contains more than one tab.",
                                 "Close", "Cancel", NULL, NULL, NULL);
    if (choice == 1)
@@ -573,7 +573,7 @@ void a_UIcmd_close_all_bw(void *)
    BrowserWindow *bw;
    int choice = 1;
 
-   if (a_Bw_num() > 1)
+   if (prefs.show_quit_dialog && a_Bw_num() > 1)
       choice = a_Dialog_choice5("More than one open tab or window.",
          "Quit", "Cancel", NULL, NULL, NULL);
    if (choice == 1)
@@ -686,9 +686,9 @@ void a_UIcmd_back(void *vbw)
 /*
  * Popup the navigation menu of the Back button
  */
-void a_UIcmd_back_popup(void *vbw)
+void a_UIcmd_back_popup(void *vbw, int x, int y)
 {
-   a_Menu_history_popup((BrowserWindow*)vbw, -1);
+   a_Menu_history_popup((BrowserWindow*)vbw, x, y, -1);
 }
 
 /*
@@ -702,9 +702,9 @@ void a_UIcmd_forw(void *vbw)
 /*
  * Popup the navigation menu of the Forward button
  */
-void a_UIcmd_forw_popup(void *vbw)
+void a_UIcmd_forw_popup(void *vbw, int x, int y)
 {
-   a_Menu_history_popup((BrowserWindow*)vbw, 1);
+   a_Menu_history_popup((BrowserWindow*)vbw, x, y, 1);
 }
 
 /*
@@ -838,9 +838,9 @@ void a_UIcmd_stop(void *vbw)
 /*
  * Popup the tools menu
  */
-void a_UIcmd_tools(void *vbw, void *v_wid)
+void a_UIcmd_tools(void *vbw, int x, int y)
 {
-   a_Menu_tools_popup((BrowserWindow*)vbw, v_wid);
+   a_Menu_tools_popup((BrowserWindow*)vbw, x, y);
 }
 
 /*
@@ -1166,6 +1166,8 @@ void a_UIcmd_scroll(BrowserWindow *bw, int icmd)
       const mapping_t map[] = {
          {KEYS_SCREEN_UP, SCREEN_UP_CMD},
          {KEYS_SCREEN_DOWN, SCREEN_DOWN_CMD},
+         {KEYS_SCREEN_LEFT, SCREEN_LEFT_CMD},
+         {KEYS_SCREEN_RIGHT, SCREEN_RIGHT_CMD},
          {KEYS_LINE_UP, LINE_UP_CMD},
          {KEYS_LINE_DOWN, LINE_DOWN_CMD},
          {KEYS_LEFT, LEFT_CMD},

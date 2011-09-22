@@ -23,6 +23,7 @@
 #define PREFS_SAVE_DIR        "/tmp/"
 #define PREFS_HTTP_REFERER    "host"
 #define PREFS_HTTP_USER_AGENT "Dillo/" VERSION
+#define PREFS_THEME           "none"
 
 /*-----------------------------------------------------------------------------
  * Global Data
@@ -89,6 +90,7 @@ void a_Prefs_init(void)
    prefs.show_home = TRUE;
    prefs.show_msg = TRUE;
    prefs.show_progress_box = TRUE;
+   prefs.show_quit_dialog = TRUE;
    prefs.show_reload = TRUE;
    prefs.show_save = TRUE;
    prefs.show_search = TRUE;
@@ -98,6 +100,7 @@ void a_Prefs_init(void)
    prefs.show_url = TRUE;
    prefs.small_icons = FALSE;
    prefs.start_page = a_Url_new(PREFS_START_PAGE, NULL);
+   prefs.theme = dStrdup(PREFS_THEME);
    prefs.w3c_plus_heuristics = TRUE;
 }
 
@@ -126,4 +129,5 @@ void a_Prefs_freeall(void)
       dFree(dList_nth_data(prefs.search_urls, i));
    dList_free(prefs.search_urls);
    a_Url_free(prefs.start_page);
+   dFree(prefs.theme);
 }

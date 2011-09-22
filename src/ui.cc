@@ -305,14 +305,16 @@ static void b1_cb(Fl_Widget *wid, void *cb_data)
       if (b == FL_LEFT_MOUSE) {
          a_UIcmd_back(a_UIcmd_get_bw_by_widget(wid));
       } else if (b == FL_RIGHT_MOUSE) {
-         a_UIcmd_back_popup(a_UIcmd_get_bw_by_widget(wid));
+         a_UIcmd_back_popup(a_UIcmd_get_bw_by_widget(wid), wid->x(),
+                            wid->y() + wid->h());
       }
       break;
    case UI_FORW:
       if (b == FL_LEFT_MOUSE) {
          a_UIcmd_forw(a_UIcmd_get_bw_by_widget(wid));
       } else if (b == FL_RIGHT_MOUSE) {
-         a_UIcmd_forw_popup(a_UIcmd_get_bw_by_widget(wid));
+         a_UIcmd_forw_popup(a_UIcmd_get_bw_by_widget(wid), wid->x(),
+                            wid->y() + wid->h());
       }
       break;
    case UI_HOME:
@@ -342,7 +344,8 @@ static void b1_cb(Fl_Widget *wid, void *cb_data)
       break;
    case UI_TOOLS:
       if (b == FL_LEFT_MOUSE || b == FL_RIGHT_MOUSE) {
-         a_UIcmd_tools(a_UIcmd_get_bw_by_widget(wid), wid);
+         a_UIcmd_tools(a_UIcmd_get_bw_by_widget(wid), wid->x(),
+                       wid->y() + wid->h());
       }
       break;
    default:
@@ -714,6 +717,7 @@ int UI::handle(int event)
       if (cmd == KEYS_NOP) {
          // Do nothing
       } else if (cmd == KEYS_SCREEN_UP || cmd == KEYS_SCREEN_DOWN ||
+                 cmd == KEYS_SCREEN_LEFT || cmd == KEYS_SCREEN_RIGHT ||
                  cmd == KEYS_LINE_UP || cmd == KEYS_LINE_DOWN ||
                  cmd == KEYS_LEFT || cmd == KEYS_RIGHT ||
                  cmd == KEYS_TOP || cmd == KEYS_BOTTOM) {

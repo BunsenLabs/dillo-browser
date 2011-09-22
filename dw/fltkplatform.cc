@@ -232,10 +232,14 @@ FltkColor::FltkColor (int color): Color (color)
 {
    this->color = color;
 
-   colors[SHADING_NORMAL] = shadeColor (color, SHADING_NORMAL) << 8;
-   colors[SHADING_INVERSE] = shadeColor (color, SHADING_INVERSE) << 8;
-   colors[SHADING_DARK] = shadeColor (color, SHADING_DARK) << 8;
-   colors[SHADING_LIGHT] = shadeColor (color, SHADING_LIGHT) << 8;
+   if (!(colors[SHADING_NORMAL] = shadeColor (color, SHADING_NORMAL) << 8))
+      colors[SHADING_NORMAL] = FL_BLACK;
+   if (!(colors[SHADING_INVERSE] = shadeColor (color, SHADING_INVERSE) << 8))
+      colors[SHADING_INVERSE] = FL_BLACK;
+   if (!(colors[SHADING_DARK] = shadeColor (color, SHADING_DARK) << 8))
+      colors[SHADING_DARK] = FL_BLACK;
+   if (!(colors[SHADING_LIGHT] = shadeColor (color, SHADING_LIGHT) << 8))
+      colors[SHADING_LIGHT] = FL_BLACK;
 }
 
 FltkColor::~FltkColor ()
@@ -301,6 +305,7 @@ void FltkTooltip::onEnter()
       Fl_Box *b = new Fl_Box(0,0,100,24);
       b->box(FL_BORDER_BOX);
       b->color(fl_color_cube(FL_NUM_RED-1, FL_NUM_GREEN-1, FL_NUM_BLUE-2));
+      b->labelcolor(FL_BLACK);
       b->labelfont(FL_HELVETICA);
       b->labelsize(14);
       b->align(FL_ALIGN_WRAP|FL_ALIGN_LEFT|FL_ALIGN_INSIDE);

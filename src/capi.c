@@ -300,7 +300,7 @@ static char *Capi_dpi_build_cmd(DilloWeb *web, char *server)
    if (strcmp(server, "proto.https") == 0) {
       /* Let's be kind and make the HTTP query string for the dpi */
       char *proxy_connect = a_Http_make_connect_str(web->url);
-      Dstr *http_query = a_Http_make_query_str(web->url, FALSE);
+      Dstr *http_query = a_Http_make_query_str(web->url, web->requester,FALSE);
       /* BUG: embedded NULLs in query data will truncate message */
 
       /* BUG: WORKAROUND: request to only check the root URL's certificate.
@@ -385,9 +385,7 @@ static bool_t Capi_filters_test(const DilloUrl *wanted,
          case PREFS_FILTER_SAME_DOMAIN:
          {
             const char *req_host = URL_HOST(requester),
-                       *want_host = URL_HOST(wanted),
-                       *req_suffix,
-                       *want_suffix;
+                       *want_host = URL_HOST(wanted);
             if (want_host[0] == '\0') {
                ret = (req_host[0] == '\0' ||
                       !dStrcasecmp(URL_SCHEME(wanted), "data")) ? TRUE : FALSE;
@@ -395,14 +393,12 @@ static bool_t Capi_filters_test(const DilloUrl *wanted,
                /* This will regard "www.dillo.org" and "www.dillo.org." as
                 * different, but it doesn't seem worth caring about.
                 */
-               req_suffix = a_Url_host_find_public_suffix(req_host);
-               want_suffix = a_Url_host_find_public_suffix(want_host);
-
-               ret = dStrcasecmp(req_suffix, want_suffix) == 0;
+               ret = a_Url_same_organization(wanted, requester);
             }
-
-            MSG("Capi_filters_test: %s from '%s' to '%s'\n",
-                ret ? "ALLOW" : "DENY", req_host, want_host);
+            if (ret == FALSE) {
+               MSG("Capi_filters_test: deny from '%s' to '%s'\n", req_host,
+                   want_host);
+            }
             break;
          }
          case PREFS_FILTER_ALLOW_ALL:
