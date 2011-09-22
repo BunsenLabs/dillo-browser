@@ -49,6 +49,7 @@ struct _DilloPrefs {
    int32_t bg_color;
    bool_t contrast_visited_color;
    bool_t show_tooltip;
+   char *theme;
    int panel_size;
    bool_t small_icons;
    bool_t limit_text_width;
@@ -71,6 +72,7 @@ struct _DilloPrefs {
    bool_t show_search;
    bool_t show_help;
    bool_t show_progress_box;
+   bool_t show_quit_dialog;
    bool_t fullwindow_start;
    bool_t load_images;
    bool_t load_stylesheets;

@@ -2,6 +2,18 @@
 Dillo project
 =============================================================================
 
+dillo-3.0.1 [September 21, 2011]
+
++- Add preference for UI theme.
+ - Allow key bindings for paging left/right.
+ - Privacy -- never send cookies when making third-party requests, and
+   never accept cookies in the responses to these requests.
+   Patches: corvid
++- Add show_quit_dialog dillorc option.
+   Patch: Johannes Hofmann
+
+-----------------------------------------------------------------------------
+
 dillo-3.0 [September 06, 2011]
 
 +- Ported Dillo to FLTK-1.3.

@@ -98,6 +98,7 @@ int PrefsParser::parseOption(char *name, char *value)
       { "show_home", &prefs.show_home, PREFS_BOOL },
       { "show_msg", &prefs.show_msg, PREFS_BOOL },
       { "show_progress_box", &prefs.show_progress_box, PREFS_BOOL },
+      { "show_quit_dialog", &prefs.show_quit_dialog, PREFS_BOOL },
       { "show_reload", &prefs.show_reload, PREFS_BOOL },
       { "show_save", &prefs.show_save, PREFS_BOOL },
       { "show_search", &prefs.show_search, PREFS_BOOL },
@@ -107,6 +108,7 @@ int PrefsParser::parseOption(char *name, char *value)
       { "show_url", &prefs.show_url, PREFS_BOOL },
       { "small_icons", &prefs.small_icons, PREFS_BOOL },
       { "start_page", &prefs.start_page, PREFS_URL },
+      { "theme", &prefs.theme, PREFS_STRING },
       { "w3c_plus_heuristics", &prefs.w3c_plus_heuristics, PREFS_BOOL }
    };
 
@@ -130,6 +132,8 @@ int PrefsParser::parseOption(char *name, char *value)
       break;
    case PREFS_COLOR:
       *(int32_t *)node->pref = a_Color_parse(value, *(int32_t*)node->pref,&st);
+      if (st)
+         MSG("prefs: Color '%s' not recognized.\n", value);
       break;
    case PREFS_STRING:
       dFree(*(char **)node->pref);

@@ -365,6 +365,8 @@ int main(int argc, char **argv)
    // Sets WM_CLASS hint on X11
    Fl_Window::default_xclass("dillo");
 
+   Fl::scheme(prefs.theme);
+
    if (!prefs.show_tooltip) {
       // turn off UI tooltips
       Fl::option(Fl::OPTION_SHOW_TOOLTIPS, false);
