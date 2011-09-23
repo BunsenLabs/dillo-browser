@@ -1,11 +1,11 @@
-dillo (3.0.1~rc1-1) UNRELEASED; urgency=low
+dillo (3.0.1-1) UNRELEASED; urgency=low
 
-  * New upstream release candidate
+  * New upstream bugfix release
   * Use git-import-orig instead of uupdate in watch file
-  * New patch from corvid (upstream developer) to test a potential
-    solution for #642391.
+  * Added patch from corvid (upstream developer) to at least weaken the
+    impact of #642391.
 
- -- Axel Beckert <abe@debian.org>  Fri, 23 Sep 2011 01:46:05 +0200
+ -- Axel Beckert <abe@debian.org>  Sat, 24 Sep 2011 00:14:50 +0200
 
 dillo (3.0-1) unstable; urgency=low
 
