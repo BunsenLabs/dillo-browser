@@ -75,7 +75,7 @@ binary-arch: build install
 	dh_installdocs
 	dh_installexamples
 	dh_installmenu
-	dh_installman debian/dillo.1 debian/bm-update.1 debian/dillocfg.1
+	dh_installman debian/dillo.1
 	install -m644 -D debian/dillo.desktop debian/dillo/usr/share/applications/dillo.desktop
 	# Decode png icon
 	uudecode debian/dillo.uuencode -o debian/dillo.png

@@ -1,6 +1,8 @@
 dillo (3.0.1-1) UNRELEASED; urgency=low
 
   * New upstream bugfix release
+  * Remove bm-config.1 and dillocfg.1 man pages, the according programs
+    are no more included.
   * Use git-import-orig instead of uupdate in watch file
   * Added patch from corvid (upstream developer) to at least weaken the
     impact of #642391.
