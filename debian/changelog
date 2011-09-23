@@ -1,6 +1,7 @@
 dillo (3.0.1~rc1-1) UNRELEASED; urgency=low
 
   * New upstream release candidate
+  * Use git-import-orig instead of uupdate in watch file
   * New patch from corvid (upstream developer) to test a potential
     solution for #642391.
 
