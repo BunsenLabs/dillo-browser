@@ -1,0 +1,55 @@
+Patch by corvid to address #642391. Source:
+http://lists.auriga.wearlab.de/pipermail/dillo-dev/2011-September/008993.html
+
+Index: dillo/src/cache.c
+===================================================================
+--- dillo.orig/src/cache.c	2011-09-23 01:25:50.000000000 +0200
++++ dillo/src/cache.c	2011-09-23 01:44:20.000000000 +0200
+@@ -678,24 +678,31 @@
+       if (header[9] == '3' && header[10] == '0') {
+          /* 30x: URL redirection */
+          if ((location_str = Cache_parse_field(header, "Location"))) {
+-            DilloUrl *location_url;
+-
+-            entry->Flags |= CA_Redirect;
+-            if (header[11] == '1')
+-               entry->Flags |= CA_ForceRedirect;  /* 301 Moved Permanently */
+-            else if (header[11] == '2')
+-               entry->Flags |= CA_TempRedirect;   /* 302 Temporary Redirect */
+-
+-            location_url = a_Url_new(location_str, URL_STR_(entry->Url));
+-            if (URL_FLAGS(location_url) & (URL_Post + URL_Get) &&
+-                dStrcasecmp(URL_SCHEME(location_url), "dpi") == 0 &&
+-                dStrcasecmp(URL_SCHEME(entry->Url), "dpi") != 0) {
+-               /* Forbid dpi GET and POST from non dpi-generated urls */
+-               MSG("Redirection Denied! '%s' -> '%s'\n",
+-                   URL_STR(entry->Url), URL_STR(location_url));
++            DilloUrl *location_url = a_Url_new(location_str,
++                                               URL_STR_(entry->Url));
++            if (prefs.filter_auto_requests == PREFS_FILTER_SAME_DOMAIN &&
++                !a_Url_same_organization(entry->Url, location_url)) {
++               /* don't redirect; just show body like usual (if any) */
++               MSG("Redirection not followed from %s to %s\n",
++                   URL_HOST(entry->Url), URL_HOST(location_url));
+                a_Url_free(location_url);
+             } else {
+-               entry->Location = location_url;
++               entry->Flags |= CA_Redirect;
++               if (header[11] == '1')
++                  entry->Flags |= CA_ForceRedirect; /* 301 Moved Permanently */
++               else if (header[11] == '2')
++                  entry->Flags |= CA_TempRedirect;  /* 302 Temporary Redirect*/
++
++               if (URL_FLAGS(location_url) & (URL_Post + URL_Get) &&
++                   dStrcasecmp(URL_SCHEME(location_url), "dpi") == 0 &&
++                   dStrcasecmp(URL_SCHEME(entry->Url), "dpi") != 0) {
++                  /* Forbid dpi GET and POST from non dpi-generated urls */
++                  MSG("Redirection Denied! '%s' -> '%s'\n",
++                      URL_STR(entry->Url), URL_STR(location_url));
++                  a_Url_free(location_url);
++               } else {
++                  entry->Location = location_url;
++               }
+             }
+             dFree(location_str);
+          }
