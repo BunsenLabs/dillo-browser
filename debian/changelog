@@ -1,14 +1,15 @@
-dillo (3.0.1-1) UNRELEASED; urgency=low
+dillo (3.0.1-1) unstable; urgency=low
 
   * New upstream bugfix release
-  * Remove bm-config.1 and dillocfg.1 man pages, the according programs
-    are no more included.
-  * Use doc/dillo.1 instead of debian/dillo.1.
+  * Clean up debian-provided docs for 3.0
+    + Remove bm-config.1 and dillocfg.1 man pages, the according programs
+      are no more included.
+    + Use doc/dillo.1 instead of debian/dillo.1.
   * Use git-import-orig instead of uupdate in watch file
   * Added patch from corvid (upstream developer) to at least weaken the
     impact of #642391.
 
- -- Axel Beckert <abe@debian.org>  Sat, 24 Sep 2011 00:14:50 +0200
+ -- Axel Beckert <abe@debian.org>  Sat, 24 Sep 2011 09:47:30 +0200
 
 dillo (3.0-1) unstable; urgency=low
 
