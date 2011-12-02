@@ -303,15 +303,15 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props) {
                   *c = '\0';
                dStrstrip(p->value.strVal);
 
-               if (strcmp (p->value.strVal, "serif") == 0)
+               if (dStrAsciiCasecmp (p->value.strVal, "serif") == 0)
                   fontName = prefs.font_serif;
-               else if (strcmp (p->value.strVal, "sans-serif") == 0)
+               else if (dStrAsciiCasecmp (p->value.strVal, "sans-serif") == 0)
                   fontName = prefs.font_sans_serif;
-               else if (strcmp (p->value.strVal, "cursive") == 0)
+               else if (dStrAsciiCasecmp (p->value.strVal, "cursive") == 0)
                   fontName = prefs.font_cursive;
-               else if (strcmp (p->value.strVal, "fantasy") == 0)
+               else if (dStrAsciiCasecmp (p->value.strVal, "fantasy") == 0)
                   fontName = prefs.font_fantasy;
-               else if (strcmp (p->value.strVal, "monospace") == 0)
+               else if (dStrAsciiCasecmp (p->value.strVal, "monospace") == 0)
                   fontName = prefs.font_monospace;
                else if (Font::exists(layout, p->value.strVal))
                   fontName = p->value.strVal;
@@ -331,30 +331,33 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props) {
             if (p->type == CSS_TYPE_ENUM) {
                switch (p->value.intVal) {
                   case CSS_FONT_SIZE_XX_SMALL:
-                     fontAttrs.size = roundInt(11.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(8.1 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_X_SMALL:
-                     fontAttrs.size = roundInt(12.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(9.7 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_SMALL:
-                     fontAttrs.size = roundInt(13.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(11.7 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_MEDIUM:
                      fontAttrs.size = roundInt(14.0 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_LARGE:
+                     fontAttrs.size = roundInt(16.8 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_X_LARGE:
-                     fontAttrs.size = roundInt(16.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(20.2 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_XX_LARGE:
-                     fontAttrs.size = roundInt(17.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(24.2 * prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_SMALLER:
-                     fontAttrs.size -= roundInt(1.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(fontAttrs.size * 0.83 *
+                                               prefs.font_factor);
                      break;
                   case CSS_FONT_SIZE_LARGER:
-                     fontAttrs.size += roundInt(1.0 * prefs.font_factor);
+                     fontAttrs.size = roundInt(fontAttrs.size * 1.2 *
+                                               prefs.font_factor);
                      break;
                   default:
                      assert(false); // invalid font-size enum
@@ -561,6 +564,9 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props) {
             break;
          case CSS_PROPERTY_TEXT_INDENT:
             computeLength (&attrs->textIndent, p->value.intVal, attrs->font);
+            break;
+         case CSS_PROPERTY_TEXT_TRANSFORM:
+            attrs->textTransform = (TextTransform) p->value.intVal;
             break;
          case CSS_PROPERTY_VERTICAL_ALIGN:
             attrs->valign = (VAlignType) p->value.intVal;

@@ -265,16 +265,16 @@ bool CssSimpleSelector::match (const DoctreeNode *n) {
    if (element != ELEMENT_ANY && element != n->element)
       return false;
    if (pseudo != NULL &&
-      (n->pseudo == NULL || dStrcasecmp (pseudo, n->pseudo) != 0))
+      (n->pseudo == NULL || dStrAsciiCasecmp (pseudo, n->pseudo) != 0))
       return false;
-   if (id != NULL && (n->id == NULL || dStrcasecmp (id, n->id) != 0))
+   if (id != NULL && (n->id == NULL || dStrAsciiCasecmp (id, n->id) != 0))
       return false;
    if (klass != NULL) {
       for (int i = 0; i < klass->size (); i++) {
          bool found = false;
          if (n->klass != NULL) {
             for (int j = 0; j < n->klass->size (); j++) {
-               if (dStrcasecmp (klass->get(i), n->klass->get(j)) == 0) {
+               if (dStrAsciiCasecmp (klass->get(i), n->klass->get(j)) == 0) {
                   found = true;
                   break;
                }
@@ -610,7 +610,7 @@ void CssContext::buildUserAgentStyle () {
      "th {font-weight: bolder; text-align: center}"
      "code, tt, pre, samp, kbd {font-family: monospace}"
      /* WORKAROUND: Reset font properties in tables as some
-      * some pages rely on it (e.g. gmail).
+      * pages rely on it (e.g. gmail).
       * http://developer.mozilla.org/En/Fixing_Table_Inheritance_in_Quirks_Mode
       * has a detailed description of the issue.
       */

@@ -51,14 +51,14 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(sysconfdir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_dillo_OBJECTS = dillo.$(OBJEXT) paths.$(OBJEXT) ui.$(OBJEXT) \
 	uicmd.$(OBJEXT) bw.$(OBJEXT) cookies.$(OBJEXT) auth.$(OBJEXT) \
-	colors.$(OBJEXT) misc.$(OBJEXT) history.$(OBJEXT) \
-	prefs.$(OBJEXT) prefsparser.$(OBJEXT) keys.$(OBJEXT) \
-	url.$(OBJEXT) bitvec.$(OBJEXT) klist.$(OBJEXT) chain.$(OBJEXT) \
-	utf8.$(OBJEXT) timeout.$(OBJEXT) dialog.$(OBJEXT) \
-	web.$(OBJEXT) nav.$(OBJEXT) cache.$(OBJEXT) decode.$(OBJEXT) \
-	dicache.$(OBJEXT) capi.$(OBJEXT) css.$(OBJEXT) \
-	cssparser.$(OBJEXT) styleengine.$(OBJEXT) plain.$(OBJEXT) \
-	html.$(OBJEXT) form.$(OBJEXT) table.$(OBJEXT) \
+	md5.$(OBJEXT) digest.$(OBJEXT) colors.$(OBJEXT) misc.$(OBJEXT) \
+	history.$(OBJEXT) prefs.$(OBJEXT) prefsparser.$(OBJEXT) \
+	keys.$(OBJEXT) url.$(OBJEXT) bitvec.$(OBJEXT) klist.$(OBJEXT) \
+	chain.$(OBJEXT) utf8.$(OBJEXT) timeout.$(OBJEXT) \
+	dialog.$(OBJEXT) web.$(OBJEXT) nav.$(OBJEXT) cache.$(OBJEXT) \
+	decode.$(OBJEXT) dicache.$(OBJEXT) capi.$(OBJEXT) \
+	css.$(OBJEXT) cssparser.$(OBJEXT) styleengine.$(OBJEXT) \
+	plain.$(OBJEXT) html.$(OBJEXT) form.$(OBJEXT) table.$(OBJEXT) \
 	bookmark.$(OBJEXT) dns.$(OBJEXT) gif.$(OBJEXT) jpeg.$(OBJEXT) \
 	png.$(OBJEXT) imgbuf.$(OBJEXT) image.$(OBJEXT) menu.$(OBJEXT) \
 	dpiapi.$(OBJEXT) findbar.$(OBJEXT) xembed.$(OBJEXT)
@@ -296,6 +296,10 @@ dillo_SOURCES = \
 	cookies.h \
 	auth.c \
 	auth.h \
+	md5.c \
+	md5.h \
+	digest.c \
+	digest.h \
 	colors.c \
 	colors.h \
 	binaryconst.h \
@@ -475,6 +479,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/decode.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dialog.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dicache.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/digest.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dillo.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dns.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dpiapi.Po@am__quote@
@@ -488,6 +493,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/jpeg.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/keys.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/klist.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/md5.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/menu.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/misc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nav.Po@am__quote@
