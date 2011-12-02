@@ -81,13 +81,13 @@ void Html_tag_open_table(DilloHtml *html, const char *tag, int tagsize)
                                         a_Html_parse_length (html, attrbuf));
 
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "align"))) {
-      if (dStrcasecmp (attrbuf, "left") == 0)
+      if (dStrAsciiCasecmp (attrbuf, "left") == 0)
          html->styleEngine->setNonCssHint (CSS_PROPERTY_TEXT_ALIGN,
                                            CSS_TYPE_ENUM, TEXT_ALIGN_LEFT);
-      else if (dStrcasecmp (attrbuf, "right") == 0)
+      else if (dStrAsciiCasecmp (attrbuf, "right") == 0)
          html->styleEngine->setNonCssHint (CSS_PROPERTY_TEXT_ALIGN,
                                            CSS_TYPE_ENUM, TEXT_ALIGN_RIGHT);
-      else if (dStrcasecmp (attrbuf, "center") == 0)
+      else if (dStrAsciiCasecmp (attrbuf, "center") == 0)
          html->styleEngine->setNonCssHint (CSS_PROPERTY_TEXT_ALIGN,
                                            CSS_TYPE_ENUM, TEXT_ALIGN_CENTER);
    }
@@ -347,9 +347,6 @@ static void Html_tag_open_table_cell(DilloHtml *html,
       if (a_Html_get_attr(html, tag, tagsize, "nowrap"))
          html->styleEngine->setNonCssHint(CSS_PROPERTY_WHITE_SPACE,
                                           CSS_TYPE_ENUM, WHITE_SPACE_NOWRAP);
-      else
-         html->styleEngine->setNonCssHint(CSS_PROPERTY_WHITE_SPACE,
-                                          CSS_TYPE_ENUM, WHITE_SPACE_NORMAL);
 
       a_Html_tag_set_align_attr (html, tag, tagsize);
 

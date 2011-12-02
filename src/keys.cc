@@ -103,7 +103,9 @@ static const KeyBinding_t default_keys[] = {
    { "new-tab"      , KEYS_NEW_TAB      , FL_CTRL   , 't'             },
    { "left-tab"     , KEYS_LEFT_TAB     , FL_CTRL |
                                           FL_SHIFT  , FL_Tab          },
+   { "left-tab"     , KEYS_LEFT_TAB     , FL_CTRL   , FL_Page_Up      },
    { "right-tab"    , KEYS_RIGHT_TAB    , FL_CTRL   , FL_Tab          },
+   { "right-tab"    , KEYS_RIGHT_TAB    , FL_CTRL   , FL_Page_Down    },
    { "close-tab"    , KEYS_CLOSE_TAB    , FL_CTRL   , 'w'             },
    { "find"         , KEYS_FIND         , FL_CTRL   , 'f'             },
    { "websearch"    , KEYS_WEBSEARCH    , FL_CTRL   , 's'             },
@@ -243,7 +245,7 @@ int Keys::getKeyCode(char *keyName)
 {
    uint_t i;
    for (i = 0; i < sizeof(keyNames) / sizeof(Mapping_t); i++) {
-      if (!dStrcasecmp(keyNames[i].name, keyName)) {
+      if (!dStrAsciiCasecmp(keyNames[i].name, keyName)) {
          return keyNames[i].value;
       }
    }
@@ -260,7 +262,7 @@ KeysCommand_t Keys::getCmdCode(const char *commandName)
    uint_t i;
 
    for (i = 0; i < sizeof(default_keys) / sizeof(KeyBinding_t); i++) {
-      if (!dStrcasecmp(default_keys[i].name, commandName))
+      if (!dStrAsciiCasecmp(default_keys[i].name, commandName))
          return default_keys[i].cmd;
    }
    return KEYS_INVALID;
@@ -274,7 +276,7 @@ int Keys::getModifier(char *modifierName)
 {
    uint_t i;
    for (i = 0; i < sizeof(modifierNames) / sizeof(Mapping_t); i++) {
-      if (!dStrcasecmp(modifierNames[i].name, modifierName)) {
+      if (!dStrAsciiCasecmp(modifierNames[i].name, modifierName)) {
          return modifierNames[i].value;
       }
    }
