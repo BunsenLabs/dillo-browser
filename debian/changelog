@@ -5,6 +5,7 @@ dillo (3.0.2-1) unstable; urgency=low
   * Replace "dh_clean -k" with "dh_prep"
   * Store dillo.png directly instead of uuencoded.
     + Remove sharutils from build dependencies
+    + Create debian/source/include-binaries
 
  -- Axel Beckert <abe@debian.org>  Tue, 06 Dec 2011 22:33:02 +0100
 
