@@ -3,7 +3,7 @@ Section: web
 Priority: extra
 Maintainer: Axel Beckert <abe@debian.org>
 Standards-Version: 3.9.2
-Build-Depends: debhelper (>= 5), libfltk1.3-dev, libglib2.0-dev, libpng12-dev, zlib1g-dev, libjpeg8-dev | libjpeg-dev, autotools-dev, libssl-dev, sharutils
+Build-Depends: debhelper (>= 5), libfltk1.3-dev, libglib2.0-dev, libpng12-dev, zlib1g-dev, libjpeg8-dev | libjpeg-dev, autotools-dev, libssl-dev
 Homepage: http://www.dillo.org/
 Vcs-Git: git://anonscm.debian.org/collab-maint/dillo.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/dillo.git

@@ -49,9 +49,9 @@ clean-patched:
 	-rm -rf debian/dillo debian/files* core debian/substvars debian/prerm.debhelper debian/*postinst.debhelper debian/*postrm.debhelper
 	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`
 	-rm -f `find . -name "*.gmo"` src/dillo dpid/dpid config/dillocfg
-	-rm -f config.log debian/dillo.png
+	-rm -f config.log
 	#-rm -f `find . -name "Makefile.in"` config.guess config.sub configure
-	#-rm -f depcomp install-sh missing aclocal.m4 debian/dillo.png
+	#-rm -f depcomp install-sh missing aclocal.m4
 	[ ! -f Makefile ] || $(MAKE) clean
 	[ ! -f config.h.in.backup ] || mv -v config.h.in.backup config.h.in
 	dh_autotools-dev_restoreconfig
@@ -77,8 +77,6 @@ binary-arch: build install
 	dh_installmenu
 	dh_installman doc/dillo.1
 	install -m644 -D debian/dillo.desktop debian/dillo/usr/share/applications/dillo.desktop
-	# Decode png icon
-	uudecode debian/dillo.uuencode -o debian/dillo.png
 	# Install icons
 	install -m644 -D debian/dillo.xpm debian/dillo/usr/share/pixmaps/dillo.xpm
 	install -m644 -D debian/dillo.png debian/dillo/usr/share/pixmaps/dillo.png
