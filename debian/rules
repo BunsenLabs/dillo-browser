@@ -11,13 +11,10 @@ else
 	CONFFLAGS += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
 endif
 
-CFLAGS = -Wall -g
-CPPFLAGS=-fPIC
-ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
-	CFLAGS += -O0
-else
-	CFLAGS += -O2
-endif
+DEB_CFLAGS_MAINT_APPEND=-Wall
+DEB_CPPFLAGS_MAINT_APPEND=-fPIC
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
 
 configure: config.status
 config.h.in.backup:
@@ -30,8 +27,6 @@ config.status: config.h.in.backup
 				--sysconfdir=/etc \
 				--enable-ipv6 \
 				--enable-ssl \
-				CFLAGS="$(CFLAGS)" \
-				CPPFLAGS="$(CPPFLAGS)" \
 
 build: build-arch build-indep
 build-arch: build-stamp
