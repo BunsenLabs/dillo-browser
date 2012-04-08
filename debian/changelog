@@ -1,4 +1,4 @@
-dillo (3.0.2-2) UNRELEASED; urgency=low
+dillo (3.0.2-2) unstable; urgency=low
 
   * Compile with -fPIC to avoid FTBFS on amd64 (Closes: #664949)
   * Enable hardening build flags via dpkg-buildflags
@@ -7,7 +7,7 @@ dillo (3.0.2-2) UNRELEASED; urgency=low
     "libpng12-dev" (Closes: #662301)
   * Bump Standards-Version to 3.9.3 (no changes)
 
- -- Axel Beckert <abe@debian.org>  Sat, 24 Mar 2012 21:15:35 +0100
+ -- Axel Beckert <abe@debian.org>  Sun, 08 Apr 2012 18:47:15 +0200
 
 dillo (3.0.2-1) unstable; urgency=low
 
