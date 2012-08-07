@@ -1,3 +1,10 @@
+dillo (3.0.2-3) UNRELEASED; urgency=low
+
+  * No more hardcode -fPIC, the real source of #664949 seems to have been
+    #677705 which has been fixed in the meanwhile.
+
+ -- Axel Beckert <abe@debian.org>  Tue, 07 Aug 2012 20:06:20 +0200
+
 dillo (3.0.2-2) unstable; urgency=low
 
   * Compile with -fPIC to avoid FTBFS on amd64 (Closes: #664949)

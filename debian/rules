@@ -12,7 +12,6 @@ else
 endif
 
 DEB_CFLAGS_MAINT_APPEND=-Wall
-DEB_CPPFLAGS_MAINT_APPEND=-fPIC
 DPKG_EXPORT_BUILDFLAGS = 1
 include /usr/share/dpkg/buildflags.mk
 
