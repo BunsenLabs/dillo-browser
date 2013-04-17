@@ -4,6 +4,7 @@ dillo (3.0.3-1) experimental; urgency=low
     + Shows URL already while loading (Closes: #696611)
   * No more hardcode -fPIC, the real source of #664949 seems to have been
     #677705 which has been fixed in the meanwhile.
+  * Bump Standards-Version to 3.9.4 (no changes)
 
  -- Axel Beckert <abe@debian.org>  Wed, 17 Apr 2013 16:59:43 +0200
 
