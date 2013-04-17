@@ -39,16 +39,7 @@ clean: clean-patched
 clean-patched:
 	dh_testdir
 	dh_testroot
-	rm -f build-stamp configure-stamp
 	[ ! -f Makefile ] || $(MAKE) distclean
-	-rm -f `find . -name "*~"`
-	-rm -rf debian/dillo debian/files* core debian/substvars debian/prerm.debhelper debian/*postinst.debhelper debian/*postrm.debhelper
-	-rm -f `find . -name "*.o"` `find . -name "*.dpi"` `find . -name "*.a"`
-	-rm -f `find . -name "*.gmo"` src/dillo dpid/dpid config/dillocfg
-	-rm -f config.log
-	#-rm -f `find . -name "Makefile.in"` config.guess config.sub configure
-	#-rm -f depcomp install-sh missing aclocal.m4
-	[ ! -f Makefile ] || $(MAKE) clean
 	[ ! -f config.h.in.backup ] || mv -v config.h.in.backup config.h.in
 	dh_autotools-dev_restoreconfig
 	dh_clean
