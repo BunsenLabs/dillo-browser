@@ -18,11 +18,10 @@ build-stamp: config.status
 	$(MAKE)
 	touch build-stamp
 
-clean: clean-patched
-clean-patched:
+clean:
 	dh_testdir
 	dh_testroot
-	[ ! -f Makefile ] || $(MAKE) distclean
+	dh_auto_clean
 	[ ! -f config.h.in.backup ] || mv -v config.h.in.backup config.h.in
 	dh_autotools-dev_restoreconfig
 	dh_clean
