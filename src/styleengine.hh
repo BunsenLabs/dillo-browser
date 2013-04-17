@@ -36,6 +36,10 @@ class StyleEngine {
       Doctree *doctree;
       int importDepth;
 
+      void stackPush ();
+      void stackPop ();
+      void buildUserAgentStyle ();
+      void buildUserStyle ();
       dw::core::style::Style *style0 (int i);
       dw::core::style::Style *wordStyle0 ();
       inline void setNonCssHint(CssPropertyName name, CssValueType type,

@@ -125,7 +125,6 @@ static void IO_free(IOData_t *io)
  */
 static void IO_close_fd(IOData_t *io, int CloseCode)
 {
-   int st;
    int events = 0;
 
    _MSG("====> begin IO_close_fd (%d) Key=%d CloseCode=%d Flags=%d ",
@@ -135,9 +134,7 @@ static void IO_close_fd(IOData_t *io, int CloseCode)
     * closed! (other clients may set 'IOFlag_ForceClose') */
    if (((io->Flags & IOFlag_ForceClose) || (CloseCode == IO_StopRdWr)) &&
        io->FD != -1) {
-      do
-         st = close(io->FD);
-      while (st < 0 && errno == EINTR);
+      dClose(io->FD);
    } else {
       _MSG(" NOT CLOSING ");
    }
@@ -369,8 +366,11 @@ void a_IO_ccc(int Op, int Branch, int Dir, ChainLink *Info,
          case OpAbort:
             io = Info->LocalKey;
             if (io->Buf->len > 0) {
-               MSG_WARN("IO_write, closing with pending data not sent\n");
-               MSG_WARN(" \"%s\"\n", dStr_printable(io->Buf, 2048));
+               char *newline = memchr(io->Buf->str, '\n', io->Buf->len);
+               int msglen = newline ? newline - io->Buf->str : 2048;
+
+               MSG_WARN("IO_write, closing with pending data not sent: "
+                        "\"%s\"\n", dStr_printable(io->Buf, msglen));
             }
             /* close FD, remove from ValidIOs and remove its watch */
             IO_close_fd(io, Op == OpEnd ? IO_StopWr : IO_StopRdWr);

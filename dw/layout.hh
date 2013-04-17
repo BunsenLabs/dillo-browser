@@ -176,8 +176,7 @@ private:
     */
    void moveOutOfView (ButtonState state) { moveToWidget (NULL, state); }
 
-   bool processMouseEvent (MousePositionEvent *event, ButtonEventType type,
-                           bool mayBeSuppressed);
+   bool processMouseEvent (MousePositionEvent *event, ButtonEventType type);
    bool buttonEvent (ButtonEventType type, View *view,
                      int numPressed, int x, int y, ButtonState state,
                      int button);
@@ -192,6 +191,8 @@ private:
    void adjustScrollPos ();
    static bool calcScrollInto (int targetValue, int requestedSize,
                                int *value, int viewportSize);
+   int currHScrollbarThickness();
+   int currVScrollbarThickness();
 
    void updateAnchor ();
 
@@ -290,6 +291,11 @@ public:
    void scrollPosChanged (View *view, int x, int y);
    void viewportSizeChanged (View *view, int width, int height);
 
+   inline Platform *getPlatform ()
+   {
+      return platform;
+   }
+
    /* delegated */
 
    inline int textWidth (style::Font *font, const char *text, int len)
@@ -329,7 +335,7 @@ public:
 
    inline style::Font *createFont (style::FontAttrs *attrs, bool tryEverything)
    {
-      return  platform->createFont (attrs, tryEverything);
+      return platform->createFont (attrs, tryEverything);
    }
 
    inline bool fontExists (const char *name)
@@ -383,8 +389,8 @@ public:
    inline style::Color* getBgColor () { return bgColor; }
 };
 
-} // namespace dw
 } // namespace core
+} // namespace dw
 
 #endif // __DW_LAYOUT_HH__
 

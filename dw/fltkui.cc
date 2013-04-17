@@ -60,19 +60,76 @@ int CustInput2::handle(int e)
    // We're only interested in some flags
    unsigned modifier = Fl::event_state() & (FL_SHIFT | FL_CTRL | FL_ALT);
 
-   if (e == FL_KEYBOARD && modifier == FL_CTRL) {
-      if (k == 'a' || k == 'e') {
-         position(k == 'a' ? 0 : size());
-         return 1;
-      } else if (k == 'k') {
-         cut(position(), size());
-         return 1;
-      } else if (k == 'd') {
-         cut(position(), position()+1);
-         return 1;
+   if (e == FL_KEYBOARD) {
+      if (k == FL_Page_Down || k == FL_Page_Up || k == FL_Up || k == FL_Down) {
+         // Let them through for key commands and viewport motion.
+         return 0;
+      }
+      if (modifier == FL_CTRL) {
+         if (k == 'a' || k == 'e') {
+            position(k == 'a' ? 0 : size());
+            return 1;
+         } else if (k == 'k') {
+            cut(position(), size());
+            return 1;
+         } else if (k == 'd') {
+            cut(position(), position()+1);
+            return 1;
+         } else if (k == 'h' || k == 'i' || k == 'j' || k == 'l' || k == 'm') {
+            // Fl_Input wants to use ^H as backspace, and also "insert a few
+            // selected control characters literally", but this gets in the way
+            // of key commands.
+            return 0;
+         }
       }
    }
    return Fl_Input::handle(e);
+}
+
+
+/*
+ * Used to handle some keystrokes as shortcuts to option menuitems
+ * (i.e. jump to the next menuitem whose label starts with the pressed key)
+ */
+class CustChoice : public Fl_Choice {
+public:
+   CustChoice (int x, int y, int w, int h, const char* l=0) :
+      Fl_Choice(x,y,w,h,l) {};
+   int handle(int e);
+};
+
+int CustChoice::handle(int e)
+{
+   int k = Fl::event_key();
+   unsigned modifier = Fl::event_state() & (FL_SHIFT|FL_CTRL|FL_ALT|FL_META);
+
+   _MSG("CustChoice::handle %p e=%d active=%d focus=%d\n",
+       this, e, active(), (Fl::focus() == this));
+   if (Fl::focus() != this) {
+      ; // Not Focused, let FLTK handle it
+   } else if (e == FL_KEYDOWN && modifier == 0) {
+      if (k == FL_Enter || k == FL_Down) {
+         return Fl_Choice::handle(FL_PUSH); // activate menu
+
+      } else if (isalnum(k)) { // try key as shortcut to menuitem
+         int t = value()+1 >= size() ? 0 : value()+1;
+         while (t != value()) {
+             const Fl_Menu_Item *mi = &(menu()[t]);
+             if (mi->submenu()) // submenu?
+                ;
+             else if (mi->label() && mi->active()) { // menu item?
+                if (k == tolower(mi->label()[0])) {
+                   value(mi);
+                   return 1; // Let FLTK know we used this key
+                }
+             }
+             if (++t == size())
+                t = 0;
+         }
+      }
+   }
+
+   return Fl_Choice::handle(e);
 }
 
 //----------------------------------------------------------------------------
@@ -402,11 +459,34 @@ void FltkComplexButtonResource::widgetCallback (Fl_Widget *widget,
 {
    FltkComplexButtonResource *res = (FltkComplexButtonResource*)data;
 
-   if (!Fl::event_button3()) {
-      res->click_x = Fl::event_x();
-      res->click_y = Fl::event_y();
+   if (Fl::event() == FL_RELEASE && Fl::event_button() != FL_RIGHT_MOUSE) {
+      int w = widget->w(), h = widget->h();
+
+      res->click_x = Fl::event_x() - widget->x();
+      res->click_y = Fl::event_y() - widget->y();
+      if (res->style) {
+         res->click_x -= res->style->boxOffsetX();
+         res->click_y -= res->style->boxOffsetY();
+         w -= res->style->boxDiffWidth();
+         h -= res->style->boxDiffHeight();
+      }
+      if (res->click_x >= 0 && res->click_y >= 0 &&
+          res->click_x < w && res->click_y < h) {
+         dw::core::EventButton event;
+         setButtonEvent(&event);
+         res->emitClicked(&event);
+      }
+   } else if (Fl::event() == FL_KEYBOARD) {
+      // Simulate a click.
       dw::core::EventButton event;
-      setButtonEvent(&event);
+
+      res->click_x = res->click_y = 0;
+      event.xCanvas = widget->x() + res->style->boxOffsetX();
+      event.yCanvas = widget->y() + res->style->boxOffsetY();
+      // ButtonState doesn't have mouse button values on a release.
+      event.state = (core::ButtonState) 0;
+      event.button = 1;
+      event.numPressed = 1;
       res->emitClicked(&event);
    }
 }
@@ -466,7 +546,7 @@ Fl_Widget *FltkComplexButtonResource::createNewWidget (core::Allocation
    button->callback (widgetCallback, this);
    button->when (FL_WHEN_RELEASE);
    if (!relief)
-      button->box(FL_FLAT_BOX);
+      button->box(FL_NO_BOX);
 
    flatView = new FltkFlatView (allocation->x + reliefXThickness (),
                                 allocation->y + reliefYThickness (),
@@ -482,11 +562,11 @@ Fl_Widget *FltkComplexButtonResource::createNewWidget (core::Allocation
 
 // ----------------------------------------------------------------------
 
-FltkEntryResource::FltkEntryResource (FltkPlatform *platform, int maxLength,
+FltkEntryResource::FltkEntryResource (FltkPlatform *platform, int size,
                                       bool password, const char *label):
    FltkSpecificResource <dw::core::ui::EntryResource> (platform)
 {
-   this->maxLength = maxLength;
+   this->size = size;
    this->password = password;
    this->label = label ? strdup(label) : NULL;
    this->label_w = 0;
@@ -557,11 +637,11 @@ void FltkEntryResource::sizeRequest (core::Requisition *requisition)
    if (displayed() && style) {
       FltkFont *font = (FltkFont*)style->font;
       fl_font(font->font,font->size);
-      /* WORKAROUND: fl_width(uint_t) is not working on non-xft X.
-       * Reported to FLTK as STR #2688 */
+      // WORKAROUND: A bug with fl_width(uint_t) on non-xft X was present in
+      // 1.3.0 (STR #2688).
       requisition->width =
          (int)fl_width ("n")
-         * (maxLength == UNLIMITED_MAX_LENGTH ? 10 : maxLength)
+         * (size == UNLIMITED_SIZE ? 10 : size)
          + label_w + (2 * RELIEF_X_THICKNESS);
       requisition->ascent = font->ascent + RELIEF_Y_THICKNESS;
       requisition->descent = font->descent + RELIEF_Y_THICKNESS;
@@ -616,7 +696,26 @@ void FltkEntryResource::setEditable (bool editable)
    this->editable = editable;
 }
 
+void FltkEntryResource::setMaxLength (int maxlen)
+{
+   ((Fl_Input *)widget)->maximum_size(maxlen);
+}
+
 // ----------------------------------------------------------------------
+
+static int kf_backspace_word (int c, Fl_Text_Editor *e)
+{
+   int p1, p2 = e->insert_position();
+
+   e->previous_word();
+   p1 = e->insert_position();
+   e->buffer()->remove(p1, p2);
+   e->show_insert_position();
+   e->set_changed();
+   if (e->when() & FL_WHEN_CHANGED)
+      e->do_callback();
+   return 0;
+}
 
 FltkMultiLineTextResource::FltkMultiLineTextResource (FltkPlatform *platform,
                                                       int cols, int rows):
@@ -659,6 +758,9 @@ Fl_Widget *FltkMultiLineTextResource::createNewWidget (core::Allocation
                           allocation->ascent + allocation->descent);
    text->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
    text->buffer (buffer);
+   text->remove_key_binding(FL_BackSpace, FL_TEXT_EDITOR_ANY_STATE);
+   text->add_key_binding(FL_BackSpace, 0, Fl_Text_Editor::kf_backspace);
+   text->add_key_binding(FL_BackSpace, FL_CTRL, kf_backspace_word);
    return text;
 }
 
@@ -680,8 +782,8 @@ void FltkMultiLineTextResource::sizeRequest (core::Requisition *requisition)
    if (style) {
       FltkFont *font = (FltkFont*)style->font;
       fl_font(font->font,font->size);
-      /* WORKAROUND: fl_width(uint_t) is not working on non-xft X.
-       * Reported to FLTK as STR #2688 */
+      // WORKAROUND: A bug with fl_width(uint_t) on non-xft X was present in
+      // 1.3.0 (STR #2688).
       requisition->width =
          (int)fl_width ("n") * numCols + 2 * RELIEF_X_THICKNESS;
       requisition->ascent =
@@ -984,9 +1086,9 @@ Fl_Widget *FltkOptionMenuResource::createNewWidget (core::Allocation
                                                      *allocation)
 {
    Fl_Choice *choice =
-      new Fl_Choice (allocation->x, allocation->y,
-                          allocation->width,
-                          allocation->ascent + allocation->descent);
+      new CustChoice (allocation->x, allocation->y,
+                      allocation->width,
+                      allocation->ascent + allocation->descent);
    choice->menu(menu);
    return choice;
 }
@@ -1077,6 +1179,12 @@ void FltkOptionMenuResource::addItem (const char *str,
    queueResize (true);
 }
 
+void FltkOptionMenuResource::setItem (int index, bool selected)
+{
+   if (selected)
+      ((Fl_Choice *)widget)->value(menu+index);
+}
+
 void FltkOptionMenuResource::pushGroup (const char *name, bool enabled)
 {
    Fl_Menu_Item *item = newItem();
@@ -1137,6 +1245,7 @@ Fl_Widget *FltkListResource::createNewWidget (core::Allocation *allocation)
                                                  : FL_TREE_SELECT_SINGLE);
    tree->showroot(0);
    tree->connectorstyle(FL_TREE_CONNECTOR_NONE);
+   tree->margintop(0);
    tree->marginleft(-14);
    tree->callback(widgetCallback,this);
    tree->when(FL_WHEN_CHANGED);
@@ -1162,12 +1271,19 @@ void FltkListResource::widgetCallback (Fl_Widget *widget, void *data)
 {
    Fl_Tree_Item *fltkItem = ((Fl_Tree *) widget)->callback_item ();
    int index = -1;
+
    if (fltkItem)
       index = (long) (fltkItem->user_data ());
    if (index > -1) {
-      FltkListResource *res = (FltkListResource *) data;
       bool selected = fltkItem->is_selected ();
-      res->itemsSelected.set (index, selected);
+
+      if (selected && fltkItem->has_children()) {
+         /* Don't permit a group to be selected. */
+         fltkItem->deselect();
+      } else {
+         FltkListResource *res = (FltkListResource *) data;
+         res->itemsSelected.set (index, selected);
+      }
    }
 }
 
@@ -1203,11 +1319,35 @@ void FltkListResource::addItem (const char *str, bool enabled, bool selected)
    queueResize (true);
 }
 
+void FltkListResource::setItem (int index, bool selected)
+{
+   Fl_Tree *tree = (Fl_Tree *) widget;
+   Fl_Tree_Item *item = tree->root()->next();
+
+   for (int i = 0; item && i < index; i++)
+      item = item->next();
+
+   if (item) {
+      bool do_callback = false;
+      itemsSelected.set (index, selected);
+      if (selected) {
+         if (mode == SELECTION_MULTIPLE) {
+            tree->select(item, do_callback);
+         } else {
+            /* callback to deselect other selected item */
+            do_callback = true;
+            tree->select_only(item, do_callback);
+         }
+      } else {
+         tree->deselect(item, do_callback);
+      }
+   }
+}
+
 void FltkListResource::pushGroup (const char *name, bool enabled)
 {
    bool selected = false;
 
-   /* TODO: make it impossible to select a group */
    currParent = (Fl_Tree_Item *) newItem(name, enabled, selected);
    queueResize (true);
 }
@@ -1252,10 +1392,10 @@ void FltkListResource::sizeRequest (core::Requisition *requisition)
       if (showRows < rows) {
          rows = showRows;
       }
-      requisition->width = getMaxItemWidth() + 5 + Fl::scrollbar_size();;
-      requisition->ascent = font->ascent + 5 +
-                            (rows - 1) * (font->ascent + font->descent + 1);
-      requisition->descent = font->descent + 3;
+      requisition->width = getMaxItemWidth() + 5 + Fl::scrollbar_size();
+      requisition->descent = font->descent + 2;
+      requisition->ascent = (rows * (font->size + font->descent + 1)) + 4 -
+                            requisition->descent;
    } else {
       requisition->width = 1;
       requisition->ascent = 1;

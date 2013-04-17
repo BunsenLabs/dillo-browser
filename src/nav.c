@@ -27,12 +27,10 @@
  * For back and forward navigation, each bw keeps an url index,
  * and its scroll position.
  */
-typedef struct _nav_stack_item nav_stack_item;
-struct _nav_stack_item
-{
+typedef struct {
    int url_idx;
    int posx, posy;
-};
+} nav_stack_item;
 
 
 
@@ -487,8 +485,9 @@ static void Nav_reload_callback(void *data)
          confirmed = 1;
       } else if (URL_FLAGS(h_url) & URL_Post) {
          /* Attempt to repost data, let's confirm... */
-         choice = a_Dialog_choice5("Repost form data?",
-                                   "No", "Yes", "Cancel", NULL, NULL);
+         choice = a_Dialog_choice("Dillo: Repost form?",
+                                  "Repost form data?",
+                                  "No", "Yes", "Cancel", NULL);
          confirmed = (choice == 2);  /* "Yes" */
       }
 
@@ -587,6 +586,14 @@ int a_Nav_get_buf(const DilloUrl *Url, char **PBuf, int *BufSize)
 void a_Nav_unref_buf(const DilloUrl *Url)
 {
    a_Capi_unref_buf(Url);
+}
+
+/*
+ * Wrapper for a_Capi_get_content_type().
+ */
+const char *a_Nav_get_content_type(const DilloUrl *url)
+{
+   return a_Capi_get_content_type(url);
 }
 
 /*

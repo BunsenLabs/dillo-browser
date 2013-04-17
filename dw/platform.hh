@@ -44,7 +44,7 @@ public:
     * \brief This methods notifies the platform, that a view has been detached
     *    from the related layout.
     */
-   virtual void detachView  (View *view) = 0;
+   virtual void detachView (View *view) = 0;
 
    /*
     * -----------------------------------
@@ -164,7 +164,7 @@ public:
    virtual ui::ResourceFactory *getResourceFactory () = 0;
 };
 
-} // namespace dw
 } // namespace core
+} // namespace dw
 
 #endif // __DW_PLATFORM_HH__

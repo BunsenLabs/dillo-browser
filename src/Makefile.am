@@ -25,6 +25,8 @@ dillo_SOURCES = \
 	dillo.cc \
 	paths.cc \
 	paths.hh \
+	tipwin.cc \
+	tipwin.hh \
 	ui.cc \
 	ui.hh \
 	uicmd.cc \
@@ -82,6 +84,8 @@ dillo_SOURCES = \
 	dicache.h \
 	capi.c \
 	capi.h \
+	domain.c \
+	domain.h \
 	css.cc \
 	css.hh \
 	cssparser.cc \
@@ -121,5 +125,5 @@ dillo_SOURCES = \
 	xembed.cc \
 	xembed.hh
 
-EXTRA_DIST = chg srch keysrc
-sysconf_DATA = keysrc
+dist_sysconf_DATA = domainrc keysrc
+EXTRA_DIST = chg srch

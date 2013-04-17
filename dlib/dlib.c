@@ -65,8 +65,7 @@ void *dMalloc0 (size_t size)
 
 void dFree (void *mem)
 {
-   if (mem)
-      free(mem);
+   free(mem);
 }
 
 /*
@@ -910,7 +909,6 @@ char *dGethomedir ()
 
 /*
  * Get a line from a FILE stream.
- * It handles backslash as line-continues character.
  * Return value: read line on success, NULL on EOF.
  */
 char *dGetline (FILE *stream)
@@ -933,3 +931,15 @@ char *dGetline (FILE *stream)
    return line;
 }
 
+/*
+ * Close a FD handling EINTR.
+ */
+int dClose(int fd)
+{
+   int st;
+
+   do
+      st = close(fd);
+   while (st == -1 && errno == EINTR);
+   return st;
+}

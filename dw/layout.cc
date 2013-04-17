@@ -414,16 +414,16 @@ void Layout::scrollIdle ()
    case HPOS_CENTER:
       scrollX =
          scrollTargetX
-         - (viewportWidth - vScrollbarThickness - scrollTargetWidth) / 2;
+         - (viewportWidth - currVScrollbarThickness() - scrollTargetWidth) / 2;
       break;
    case HPOS_RIGHT:
       scrollX =
          scrollTargetX
-         - (viewportWidth - vScrollbarThickness - scrollTargetWidth);
+         - (viewportWidth - currVScrollbarThickness() - scrollTargetWidth);
       break;
    case HPOS_INTO_VIEW:
       xChanged = calcScrollInto (scrollTargetX, scrollTargetWidth, &scrollX,
-                                 viewportWidth - vScrollbarThickness);
+                                 viewportWidth - currVScrollbarThickness());
       break;
    case HPOS_NO_CHANGE:
       xChanged = false;
@@ -438,16 +438,16 @@ void Layout::scrollIdle ()
    case VPOS_CENTER:
       scrollY =
          scrollTargetY
-         - (viewportHeight - hScrollbarThickness - scrollTargetHeight) / 2;
+         - (viewportHeight - currHScrollbarThickness() - scrollTargetHeight)/2;
       break;
    case VPOS_BOTTOM:
       scrollY =
          scrollTargetY
-         - (viewportHeight - hScrollbarThickness - scrollTargetHeight);
+         - (viewportHeight - currHScrollbarThickness() - scrollTargetHeight);
       break;
    case VPOS_INTO_VIEW:
       yChanged = calcScrollInto (scrollTargetY, scrollTargetHeight, &scrollY,
-                                 viewportHeight - hScrollbarThickness);
+                                 viewportHeight - currHScrollbarThickness());
       break;
    case VPOS_NO_CHANGE:
       yChanged = false;
@@ -533,6 +533,17 @@ void Layout::draw (View *view, Rectangle *area)
          view->finishDrawing (&intersection);
       }
    }
+}
+
+int Layout::currHScrollbarThickness()
+{
+   return (canvasWidth > viewportWidth) ? hScrollbarThickness : 0;
+}
+
+int Layout::currVScrollbarThickness()
+{
+   return (canvasAscent + canvasDescent > viewportHeight) ?
+          vScrollbarThickness : 0;
 }
 
 /**
@@ -673,15 +684,12 @@ void Layout::resizeIdle ()
          //  view->queueDrawTotal (false);
 
          if (usesViewport) {
-            int actualHScrollbarThickness =
-               (canvasWidth > viewportWidth) ? hScrollbarThickness : 0;
-            int actualVScrollbarThickness =
-            (canvasAscent + canvasDescent > viewportHeight) ?
-            vScrollbarThickness : 0;
+            int currHThickness = currHScrollbarThickness();
+            int currVThickness = currVScrollbarThickness();
 
             if (!canvasHeightGreater &&
                canvasAscent + canvasDescent
-               > viewportHeight - actualHScrollbarThickness) {
+               > viewportHeight - currHThickness) {
                canvasHeightGreater = true;
                setSizeHints ();
                /* May queue a new resize. */
@@ -689,8 +697,7 @@ void Layout::resizeIdle ()
 
             // Set viewport sizes.
             view->setViewportSize (viewportWidth, viewportHeight,
-                                   actualHScrollbarThickness,
-                                   actualVScrollbarThickness);
+                                   currHThickness, currVThickness);
          }
       }
 
@@ -773,7 +780,7 @@ bool Layout::buttonEvent (ButtonEventType type, View *view, int numPressed,
    event.button = button;
    event.numPressed = numPressed;
 
-   return processMouseEvent (&event, type, true);
+   return processMouseEvent (&event, type);
 }
 
 /**
@@ -792,7 +799,7 @@ bool Layout::motionNotify (View *view,  int x, int y, ButtonState state)
    event.yCanvas = y;
    event.state = state;
 
-   return processMouseEvent (&event, MOTION_NOTIFY, true);
+   return processMouseEvent (&event, MOTION_NOTIFY);
 }
 
 /**
@@ -945,12 +952,37 @@ void Layout::moveToWidget (Widget *newWidgetAtPoint, ButtonState state)
  * has been called before.
  */
 bool Layout::processMouseEvent (MousePositionEvent *event,
-                                ButtonEventType type, bool mayBeSuppressed)
+                                ButtonEventType type)
 {
    Widget *widget;
 
-   for (widget = widgetAtPoint; widget; widget = widget->getParent ()) {
-      if (!mayBeSuppressed || widget->isButtonSensitive ()) {
+   /*
+    * If the event is outside of the visible region of the canvas, treat it
+    * as occurring at the region's edge. Notably, this helps when selecting
+    * text.
+    */
+   if (event->xCanvas < scrollX)
+      event->xCanvas = scrollX;
+   else {
+      int maxX = scrollX + viewportWidth - currVScrollbarThickness() - 1;
+
+      if (event->xCanvas > maxX)
+         event->xCanvas = maxX;
+   }
+   if (event->yCanvas < scrollY)
+      event->yCanvas = scrollY;
+   else {
+      int maxY = misc::min(scrollY + viewportHeight -currHScrollbarThickness(),
+                           canvasAscent + canvasDescent) - 1;
+
+      if (event->yCanvas > maxY)
+         event->yCanvas = maxY;
+   }
+
+   widget = getWidgetAtPoint(event->xCanvas, event->yCanvas);
+
+   for (; widget; widget = widget->getParent ()) {
+      if (widget->isButtonSensitive ()) {
          event->xWidget = event->xCanvas - widget->getAllocation()->x;
          event->yWidget = event->yCanvas - widget->getAllocation()->y;
 
@@ -1018,6 +1050,5 @@ void Layout::viewportSizeChanged (View *view, int width, int height)
    setSizeHints ();
 }
 
-} // namespace dw
 } // namespace core
-
+} // namespace dw

@@ -177,6 +177,7 @@ public:
    void addOption (char *value, bool selected, bool enabled);
    void ensureSelection ();
    void addOptionsTo (SelectionResource *res);
+   void reset (SelectionResource *res);
    void appendValuesTo (Dlist *values, SelectionResource *res);
 };
 
@@ -279,8 +280,7 @@ static DilloHtmlInput *Html_get_radio_input(DilloHtml *html, const char *name)
 }
 
 /*
- * Get the current input.
- * Note that this _assumes_ that there _is_ a current input.
+ * Get the current input if available.
  */
 static DilloHtmlInput *Html_get_current_input(DilloHtml *html)
 {
@@ -291,7 +291,8 @@ static DilloHtmlInput *Html_get_current_input(DilloHtml *html)
    else
       inputs = html->inputs_outside_form;
 
-   return inputs->get (inputs->size() - 1);
+   return (inputs && inputs->size() > 0) ?
+            inputs->get (inputs->size() - 1) : NULL;
 }
 
 /*
@@ -327,7 +328,7 @@ void Html_tag_open_form(DilloHtml *html, const char *tag, int tagsize)
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "action")))
       action = a_Html_url_new(html, attrbuf, NULL, 0);
    else {
-      BUG_MSG("action attribute required for <form>\n");
+      BUG_MSG("action attribute is required for <form>\n");
       action = a_Url_dup(html->base_url);
    }
    content_type = DILLO_HTML_ENC_URLENCODED;
@@ -360,31 +361,8 @@ void Html_tag_open_form(DilloHtml *html, const char *tag, int tagsize)
    a_Url_free(action);
 }
 
-void Html_tag_close_form(DilloHtml *html, int TagIdx)
+void Html_tag_close_form(DilloHtml *html)
 {
-// DilloHtmlForm *form;
-// int i;
-//
-// if (html->InFlags & IN_FORM) {
-//    form = html->getCurrentForm ();
-//
-//    /* Make buttons sensitive again */
-//    for (i = 0; i < form->inputs->size(); i++) {
-//       input_i = form->inputs->get(i);
-//       /* Check for tricky HTML (e.g. <input type=image>) */
-//       if (!input_i->widget)
-//          continue;
-//       if (input_i->type == DILLO_HTML_INPUT_SUBMIT ||
-//           input_i->type == DILLO_HTML_INPUT_RESET) {
-//          gtk_widget_set_sensitive(input_i->widget, TRUE);
-//       } else if (input_i->type == DILLO_HTML_INPUT_IMAGE ||
-//                  input_i->type == DILLO_HTML_INPUT_BUTTON_SUBMIT ||
-//                  input_i->type == DILLO_HTML_INPUT_BUTTON_RESET) {
-//          a_Dw_button_set_sensitive(DW_BUTTON(input_i->widget), TRUE);
-//       }
-//    }
-// }
-
    html->InFlags &= ~IN_FORM;
    html->InFlags &= ~IN_SELECT;
    html->InFlags &= ~IN_OPTION;
@@ -470,12 +448,10 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
       inp_type = DILLO_HTML_INPUT_SUBMIT;
       init_str = (value) ? value : dStrdup("submit");
       resource = factory->createLabelButtonResource(init_str);
-//    gtk_widget_set_sensitive(widget, FALSE); /* Until end of FORM! */
    } else if (!dStrAsciiCasecmp(type, "reset")) {
       inp_type = DILLO_HTML_INPUT_RESET;
       init_str = (value) ? value : dStrdup("Reset");
       resource = factory->createLabelButtonResource(init_str);
-//    gtk_widget_set_sensitive(widget, FALSE); /* Until end of FORM! */
    } else if (!dStrAsciiCasecmp(type, "image")) {
       if (URL_FLAGS(html->base_url) & URL_SpamSafe) {
          /* Don't request the image; make a text submit button instead */
@@ -484,7 +460,6 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
          label = attrbuf ? attrbuf : value ? value : name ? name : "Submit";
          init_str = dStrdup(label);
          resource = factory->createLabelButtonResource(init_str);
-//       gtk_widget_set_sensitive(widget, FALSE); /* Until end of FORM! */
       } else {
          inp_type = DILLO_HTML_INPUT_IMAGE;
          /* use a dw_image widget */
@@ -547,10 +522,11 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
          if (a_Html_get_attr(html, tag, tagsize, "readonly"))
             ((EntryResource *) resource)->setEditable(false);
 
-//       /* Maximum length of the text in the entry */
-//       if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "maxlength")))
-//          gtk_entry_set_max_length(GTK_ENTRY(widget),
-//                                   strtol(attrbuf, NULL, 10));
+         /* Maximum length of the text in the entry */
+         if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "maxlength"))) {
+            int maxlen = strtol(attrbuf, NULL, 10);
+            ((EntryResource *) resource)->setMaxLength(maxlen);
+         }
       }
       if (prefs.show_tooltip &&
           (attrbuf = a_Html_get_attr(html, tag, tagsize, "title"))) {
@@ -607,17 +583,8 @@ void Html_tag_open_isindex(DilloHtml *html, const char *tag, int tagsize)
    html->InFlags &= ~IN_FORM;
 }
 
-/*
- * The textarea tag
- */
 void Html_tag_open_textarea(DilloHtml *html, const char *tag, int tagsize)
 {
-   const int MAX_COLS=1024, MAX_ROWS=10000;
-
-   char *name;
-   const char *attrbuf;
-   int cols, rows;
-
    if (html->InFlags & IN_TEXTAREA) {
       BUG_MSG("nested <textarea>\n");
       html->ReqTagClose = TRUE;
@@ -629,6 +596,19 @@ void Html_tag_open_textarea(DilloHtml *html, const char *tag, int tagsize)
    }
 
    html->InFlags |= IN_TEXTAREA;
+}
+
+/*
+ * The textarea tag
+ */
+void Html_tag_content_textarea(DilloHtml *html, const char *tag, int tagsize)
+{
+   const int MAX_COLS=1024, MAX_ROWS=10000;
+
+   char *name;
+   const char *attrbuf;
+   int cols, rows;
+
    a_Html_stash_init(html);
    S_TOP(html)->parse_mode = DILLO_HTML_PARSE_MODE_VERBATIM;
 
@@ -676,13 +656,13 @@ void Html_tag_open_textarea(DilloHtml *html, const char *tag, int tagsize)
  * Close  textarea
  * (TEXTAREA is parsed in VERBATIM mode, and entities are handled here)
  */
-void Html_tag_close_textarea(DilloHtml *html, int TagIdx)
+void Html_tag_close_textarea(DilloHtml *html)
 {
    char *str;
    DilloHtmlInput *input;
    int i;
 
-   if (html->InFlags & IN_TEXTAREA) {
+   if (html->InFlags & IN_TEXTAREA && !S_TOP(html)->display_none) {
       /* Remove the line ending that follows the opening tag */
       if (html->Stash->str[0] == '\r')
          dStr_erase(html->Stash, 0, 1);
@@ -703,8 +683,10 @@ void Html_tag_close_textarea(DilloHtml *html, int TagIdx)
       /* The HTML3.2 spec says it can have "text and character entities". */
       str = a_Html_parse_entities(html, html->Stash->str, html->Stash->len);
       input = Html_get_current_input(html);
-      input->init_str = str;
-      ((MultiLineTextResource *)input->embed->getResource ())->setText(str);
+      if (input) {
+         input->init_str = str;
+         ((MultiLineTextResource *)input->embed->getResource ())->setText(str);
+      }
 
       html->InFlags &= ~IN_TEXTAREA;
    }
@@ -744,14 +726,21 @@ void Html_tag_open_select(DilloHtml *html, const char *tag, int tagsize)
       type = DILLO_HTML_INPUT_SELECT;
       res = factory->createOptionMenuResource ();
    } else {
+      ListResource::SelectionMode mode;
+
       type = DILLO_HTML_INPUT_SEL_LIST;
-      res = factory->createListResource (multi ?
-                                         ListResource::SELECTION_MULTIPLE :
-                                         ListResource::SELECTION_EXACTLY_ONE,
-                                         rows);
+      mode = multi ? ListResource::SELECTION_MULTIPLE
+                   : ListResource::SELECTION_AT_MOST_ONE;
+      res = factory->createListResource (mode, rows);
    }
    Embed *embed = new Embed(res);
 
+   if (prefs.show_tooltip &&
+       (attrbuf = a_Html_get_attr(html, tag, tagsize, "title"))) {
+
+      html->styleEngine->setNonCssHint (PROPERTY_X_TOOLTIP, CSS_TYPE_STRING,
+                                        attrbuf);
+   }
    HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle ());
 
    Html_add_input(html, type, embed, name, NULL, false);
@@ -762,7 +751,7 @@ void Html_tag_open_select(DilloHtml *html, const char *tag, int tagsize)
 /*
  * ?
  */
-void Html_tag_close_select(DilloHtml *html, int TagIdx)
+void Html_tag_close_select(DilloHtml *html)
 {
    if (html->InFlags & IN_SELECT) {
       if (html->InFlags & IN_OPTION)
@@ -773,9 +762,10 @@ void Html_tag_close_select(DilloHtml *html, int TagIdx)
       DilloHtmlInput *input = Html_get_current_input(html);
       DilloHtmlSelect *select = input->select;
 
-      // BUG(?): should not do this for MULTI selections
-      select->ensureSelection ();
-
+      if (input->type == DILLO_HTML_INPUT_SELECT) {
+         // option menu interface requires that something be selected */
+         select->ensureSelection ();
+      }
       SelectionResource *res = (SelectionResource*)input->embed->getResource();
       select->addOptionsTo (res);
    }
@@ -805,6 +795,14 @@ void Html_tag_open_option(DilloHtml *html, const char *tag, int tagsize)
    }
 
    a_Html_stash_init(html);
+}
+
+void Html_tag_close_option(DilloHtml *html)
+{
+   if (html->InFlags & IN_OPTION) {
+      Html_option_finish(html);
+      html->InFlags &= ~IN_OPTION;
+   }
 }
 
 /*
@@ -847,9 +845,16 @@ void Html_tag_open_button(DilloHtml *html, const char *tag, int tagsize)
       /* Render the button */
       Widget *page;
       Embed *embed;
+      const char *attrbuf;
       char *name, *value;
 
-      /* We used to have Textblock (prefs.limit_text_width) here,
+      if (prefs.show_tooltip &&
+          (attrbuf = a_Html_get_attr(html, tag, tagsize, "title"))) {
+
+         html->styleEngine->setNonCssHint (PROPERTY_X_TOOLTIP, CSS_TYPE_STRING,
+                                           attrbuf);
+      }
+      /* We used to have Textblock (prefs.limit_text_width, ...) here,
        * but it caused 100% CPU usage.
        */
       page = new Textblock (false);
@@ -861,7 +866,7 @@ void Html_tag_open_button(DilloHtml *html, const char *tag, int tagsize)
 // a_Dw_button_set_sensitive (DW_BUTTON (button), FALSE);
 
       HT2TB(html)->addParbreak (5, html->styleEngine->wordStyle ());
-      HT2TB(html)->addWidget (embed, html->styleEngine->style ());
+      HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle ());
       HT2TB(html)->addParbreak (5, html->styleEngine->wordStyle ());
 
       S_TOP(html)->textblock = html->dw = page;
@@ -879,7 +884,7 @@ void Html_tag_open_button(DilloHtml *html, const char *tag, int tagsize)
 /*
  * Handle close <BUTTON>
  */
-void Html_tag_close_button(DilloHtml *html, int TagIdx)
+void Html_tag_close_button(DilloHtml *html)
 {
    html->InFlags &= ~IN_BUTTON;
 }
@@ -963,8 +968,6 @@ void DilloHtmlForm::submit(DilloHtmlInput *active_input, EventButton *event)
       }
       a_Url_free(url);
    }
-   // /* now, make the rendered area have its focus back */
-   // gtk_widget_grab_focus(GTK_BIN(bw->render_main_scroll)->child);
 }
 
 /*
@@ -1035,7 +1038,18 @@ Dstr *DilloHtmlForm::buildQueryData(DilloHtmlInput *active_submit)
    iconv_t char_encoder = (iconv_t) -1;
 
    if (submit_charset && dStrAsciiCasecmp(submit_charset, "UTF-8")) {
-      char_encoder = iconv_open(submit_charset, "UTF-8");
+      /* Some iconv implementations, given "//TRANSLIT", will do their best to
+       * transliterate the string. Under the circumstances, doing so is likely
+       * for the best.
+       */
+      char *translit = dStrconcat(submit_charset, "//TRANSLIT", NULL);
+
+      char_encoder = iconv_open(translit, "UTF-8");
+      dFree(translit);
+
+      if (char_encoder == (iconv_t) -1)
+         char_encoder = iconv_open(submit_charset, "UTF-8");
+
       if (char_encoder == (iconv_t) -1) {
          MSG_WARN("Cannot convert to character encoding '%s'\n",
                   submit_charset);
@@ -1249,7 +1263,7 @@ Dstr *DilloHtmlForm::encodeText(iconv_t char_encoder, Dstr **input)
          inLeft--;
          dStr_append_c(output, '?');
       } else if (rc == EINVAL) {
-         MSG_ERR("Html_decode_text: bad source string\n");
+         MSG_ERR("Form encode text: bad source string.\n");
       }
    }
 
@@ -1259,7 +1273,7 @@ Dstr *DilloHtmlForm::encodeText(iconv_t char_encoder, Dstr **input)
        * it is safe to display the beginning of the string in a message
        * (isn't, e.g., a password).
        */
-      MSG_WARN("String cannot be converted cleanly.\n");
+      MSG_WARN("Form encode text: string cannot be converted cleanly.\n");
    }
 
    dFree(buffer);
@@ -1317,14 +1331,15 @@ void DilloHtmlForm::filesInputMultipartAppend(Dstr* data,
          dStr_append(data, "--");
          dStr_append(data, boundary);
       }
-      // TODO: encode name, filename
       dStr_sprintfa(data,
                     "\r\n"
                     "Content-Disposition: form-data; name=\"%s\"; "
                        "filename=\"", name);
       /*
-       * Servers don't seem to like encoded names yet, but let's at least
-       * replace the characters that are the most likely to damage things.
+       * Replace the characters that are the most likely to damage things.
+       * For a while, there was some momentum to standardize on an encoding,
+       * but HTML5/Ian Hickson/his Google masters are, as of late 2012,
+       * evidently standing in opposition to all of that for some reason.
        */
       for (int i = 0; char c = filename[i]; i++) {
          if (c == '\"' || c == '\r' || c == '\n')
@@ -1357,7 +1372,6 @@ void DilloHtmlForm::inputMultipartAppend(Dstr *data,
          dStr_append(data, "--");
          dStr_append(data, boundary);
       }
-      // TODO: encode name (RFC 2231)
       dStr_sprintfa(data,
                     "\r\n"
                     "Content-Disposition: form-data; name=\"%s\"\r\n"
@@ -1745,34 +1759,11 @@ void DilloHtmlInput::reset ()
       }
       break;
    case DILLO_HTML_INPUT_SELECT:
-      if (select != NULL) {
-         /* this is in reverse order so that, in case more than one was
-          * selected, we get the last one, which is consistent with handling
-          * of multiple selected options in the layout code. */
-//       for (i = select->num_options - 1; i >= 0; i--) {
-//          if (select->options[i].init_val) {
-//             gtk_menu_item_activate(GTK_MENU_ITEM
-//                                    (select->options[i].menuitem));
-//             Html_select_set_history(input);
-//             break;
-//          }
-//       }
-      }
-      break;
    case DILLO_HTML_INPUT_SEL_LIST:
-      if (!select)
-         break;
-//    for (i = 0; i < select->num_options; i++) {
-//       if (select->options[i].init_val) {
-//          if (select->options[i].menuitem->state == GTK_STATE_NORMAL)
-//             gtk_list_select_child(GTK_LIST(select->menu),
-//                                   select->options[i].menuitem);
-//       } else {
-//          if (select->options[i].menuitem->state==GTK_STATE_SELECTED)
-//             gtk_list_unselect_child(GTK_LIST(select->menu),
-//                                     select->options[i].menuitem);
-//       }
-//    }
+      if (select != NULL) {
+         SelectionResource *sr = (SelectionResource *) embed->getResource();
+         select->reset(sr);
+      }
       break;
    case DILLO_HTML_INPUT_TEXTAREA:
       if (init_str != NULL) {
@@ -1855,6 +1846,15 @@ void DilloHtmlSelect::addOptionsTo (SelectionResource *res)
    }
 }
 
+void DilloHtmlSelect::reset (SelectionResource *res)
+{
+   int size = options->size ();
+   for (int i = 0; i < size; i++) {
+      DilloHtmlOption *option = options->get (i);
+      res->setItem(i, option->selected);
+   }
+}
+
 void DilloHtmlSelect::appendValuesTo (Dlist *values, SelectionResource *res)
 {
    int size = options->size ();
@@ -1902,29 +1902,20 @@ DilloHtmlOption::~DilloHtmlOption ()
  */
 static Embed *Html_input_image(DilloHtml *html, const char *tag, int tagsize)
 {
-   const char *attrbuf;
    DilloImage *Image;
    Embed *button = NULL;
-   DilloUrl *url = NULL;
 
-   if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "src")) &&
-       (url = a_Html_url_new(html, attrbuf, NULL, 0))) {
+   html->styleEngine->setPseudoLink ();
 
-      html->styleEngine->setPseudoLink ();
-
-      /* create new image and add it to the button */
-      if ((Image = a_Html_image_new(html, tag, tagsize, url))) {
-         IM2DW(Image)->setStyle (html->styleEngine->backgroundStyle ());
-         ResourceFactory *factory = HT2LT(html)->getResourceFactory();
-         ComplexButtonResource *complex_b_r =
-            factory->createComplexButtonResource(IM2DW(Image), false);
-         button = new Embed(complex_b_r);
-         HT2TB(html)->addWidget (button, html->styleEngine->style ());
-//       gtk_widget_set_sensitive(widget, FALSE); /* Until end of FORM! */
-
-      } else {
-         a_Url_free(url);
-      }
+   /* create new image and add it to the button */
+   a_Html_image_attrs(html, tag, tagsize);
+   if ((Image = a_Html_image_new(html, tag, tagsize))) {
+      IM2DW(Image)->setStyle (html->styleEngine->backgroundStyle ());
+      ResourceFactory *factory = HT2LT(html)->getResourceFactory();
+      ComplexButtonResource *complex_b_r =
+         factory->createComplexButtonResource(IM2DW(Image), false);
+      button = new Embed(complex_b_r);
+      HT2TB(html)->addWidget (button, html->styleEngine->style ());
    }
    if (!button)
       MSG("Html_input_image: unable to create image submit.\n");

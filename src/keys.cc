@@ -122,6 +122,7 @@ static const KeyBinding_t default_keys[] = {
    { "forward"      , KEYS_FORWARD      , 0         , '.'             },
    { "goto"         , KEYS_GOTO         , FL_CTRL   , 'l'             },
    { "home"         , KEYS_HOME         , FL_CTRL   , 'h'             },
+   { "view-source"  , KEYS_VIEW_SOURCE  , FL_CTRL   , 'u'             },
    { "screen-up"    , KEYS_SCREEN_UP    , 0         , FL_Page_Up      },
    { "screen-up"    , KEYS_SCREEN_UP    , 0         , 'b'             },
    { "screen-down"  , KEYS_SCREEN_DOWN  , 0         , FL_Page_Down    },
@@ -149,7 +150,7 @@ void Keys::init()
 
    // Fill our key bindings list
    bindings = dList_new(32);
-   for (uint_t i = 0; i < sizeof(default_keys) / sizeof(KeyBinding_t); i++) {
+   for (uint_t i = 0; i < sizeof(default_keys) / sizeof(default_keys[0]); i++) {
       if (default_keys[i].key) {
          node = dNew(KeyBinding_t, 1);
          node->name = dStrdup(default_keys[i].name);
@@ -244,7 +245,7 @@ void Keys::delKeyCmd(int key, int mod)
 int Keys::getKeyCode(char *keyName)
 {
    uint_t i;
-   for (i = 0; i < sizeof(keyNames) / sizeof(Mapping_t); i++) {
+   for (i = 0; i < sizeof(keyNames) / sizeof(keyNames[0]); i++) {
       if (!dStrAsciiCasecmp(keyNames[i].name, keyName)) {
          return keyNames[i].value;
       }
@@ -275,7 +276,7 @@ KeysCommand_t Keys::getCmdCode(const char *commandName)
 int Keys::getModifier(char *modifierName)
 {
    uint_t i;
-   for (i = 0; i < sizeof(modifierNames) / sizeof(Mapping_t); i++) {
+   for (i = 0; i < sizeof(modifierNames) / sizeof(modifierNames[0]); i++) {
       if (!dStrAsciiCasecmp(modifierNames[i].name, modifierName)) {
          return modifierNames[i].value;
       }

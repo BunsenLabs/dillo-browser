@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <locale.h>            /* for setlocale */
+#include <math.h>              /* for isinf */
+#include <limits.h>
 
 #include "prefs.h"
 #include "misc.h"
@@ -28,12 +30,12 @@ typedef enum {
    PREFS_URL,
    PREFS_INT32,
    PREFS_DOUBLE,
+   PREFS_FRACTION_100,
    PREFS_GEOMETRY,
-   PREFS_FILTER,
    PREFS_PANEL_SIZE
 } PrefType_t;
 
-typedef struct SymNode_ {
+typedef struct {
    const char *name;
    void *pref;
    PrefType_t type;
@@ -56,7 +58,6 @@ int PrefsParser::parseOption(char *name, char *value)
       { "contrast_visited_color", &prefs.contrast_visited_color, PREFS_BOOL },
       { "enterpress_forces_submit", &prefs.enterpress_forces_submit,
         PREFS_BOOL },
-      { "filter_auto_requests", &prefs.filter_auto_requests, PREFS_FILTER },
       { "focus_new_tab", &prefs.focus_new_tab, PREFS_BOOL },
       { "font_cursive", &prefs.font_cursive, PREFS_STRING },
       { "font_factor", &prefs.font_factor, PREFS_DOUBLE },
@@ -105,15 +106,32 @@ int PrefsParser::parseOption(char *name, char *value)
       { "show_stop", &prefs.show_stop, PREFS_BOOL },
       { "show_tools", &prefs.show_tools, PREFS_BOOL },
       { "show_tooltip", &prefs.show_tooltip, PREFS_BOOL },
-      { "show_url", &prefs.show_url, PREFS_BOOL },
       { "small_icons", &prefs.small_icons, PREFS_BOOL },
       { "start_page", &prefs.start_page, PREFS_URL },
       { "theme", &prefs.theme, PREFS_STRING },
-      { "w3c_plus_heuristics", &prefs.w3c_plus_heuristics, PREFS_BOOL }
+      { "ui_button_highlight_color", &prefs.ui_button_highlight_color,
+        PREFS_COLOR },
+      { "ui_fg_color", &prefs.ui_fg_color, PREFS_COLOR },
+      { "ui_main_bg_color", &prefs.ui_main_bg_color, PREFS_COLOR },
+      { "ui_selection_color", &prefs.ui_selection_color, PREFS_COLOR },
+      { "ui_tab_active_bg_color", &prefs.ui_tab_active_bg_color, PREFS_COLOR },
+      { "ui_tab_bg_color", &prefs.ui_tab_bg_color, PREFS_COLOR },
+      { "ui_tab_active_fg_color", &prefs.ui_tab_active_fg_color, PREFS_COLOR },
+      { "ui_tab_fg_color", &prefs.ui_tab_fg_color, PREFS_COLOR },
+      { "ui_text_bg_color", &prefs.ui_text_bg_color, PREFS_COLOR },
+      { "w3c_plus_heuristics", &prefs.w3c_plus_heuristics, PREFS_BOOL },
+      { "penalty_hyphen", &prefs.penalty_hyphen, PREFS_FRACTION_100 },
+      { "penalty_hyphen_2", &prefs.penalty_hyphen_2, PREFS_FRACTION_100 },
+      { "penalty_em_dash_left", &prefs.penalty_em_dash_left,
+        PREFS_FRACTION_100 },
+      { "penalty_em_dash_right", &prefs.penalty_em_dash_right,
+        PREFS_FRACTION_100 },
+      { "penalty_em_dash_right_2", &prefs.penalty_em_dash_right_2,
+        PREFS_FRACTION_100 }
    };
 
    node = NULL;
-   for (i = 0; i < sizeof(symbols) / sizeof(SymNode_t); i++) {
+   for (i = 0; i < sizeof(symbols) / sizeof(symbols[0]); i++) {
       if (!strcmp(symbols[i].name, name)) {
          node = & (symbols[i]);
          break;
@@ -132,7 +150,7 @@ int PrefsParser::parseOption(char *name, char *value)
       break;
    case PREFS_COLOR:
       *(int32_t *)node->pref = a_Color_parse(value, *(int32_t*)node->pref,&st);
-      if (st)
+      if (st == 1)
          MSG("prefs: Color '%s' not recognized.\n", value);
       break;
    case PREFS_STRING:
@@ -162,18 +180,21 @@ int PrefsParser::parseOption(char *name, char *value)
    case PREFS_DOUBLE:
       *(double *)node->pref = strtod(value, NULL);
       break;
+   case PREFS_FRACTION_100:
+      {
+         double d = strtod (value, NULL);
+         if (isinf(d)) {
+            if (d > 0)
+               *(int*)node->pref = INT_MAX;
+            else
+               *(int*)node->pref = INT_MIN;
+         } else
+            *(int*)node->pref = 100 * d;
+      }
+      break;
    case PREFS_GEOMETRY:
       a_Misc_parse_geometry(value, &prefs.xpos, &prefs.ypos,
                             &prefs.width, &prefs.height);
-      break;
-   case PREFS_FILTER:
-      if (!dStrAsciiCasecmp(value, "same_domain"))
-         prefs.filter_auto_requests = PREFS_FILTER_SAME_DOMAIN;
-      else {
-         if (dStrAsciiCasecmp(value, "allow_all"))
-            MSG_WARN("prefs: unrecognized value for filter_auto_requests\n");
-         prefs.filter_auto_requests = PREFS_FILTER_ALLOW_ALL;
-      }
       break;
    case PREFS_PANEL_SIZE:
       if (!dStrAsciiCasecmp(value, "tiny"))

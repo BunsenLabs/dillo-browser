@@ -19,6 +19,7 @@
 #include "msg.h"
 #include "timeout.hh"
 #include "utf8.hh"
+#include "tipwin.hh"
 
 #include <FL/Fl.H>
 #include <FL/Fl_Pixmap.H>
@@ -28,6 +29,8 @@
 // Include image data
 #include "pixmaps.h"
 #include "uicmd.hh"
+#include "history.h"
+#include "nav.h"
 
 struct iconset {
    Fl_Image *ImgMeterOK, *ImgMeterBug,
@@ -48,11 +51,11 @@ static struct iconset standard_icons = {
    new Fl_Pixmap(search_xpm),
    new Fl_Pixmap(help_xpm),
    new Fl_Pixmap(left_xpm),
-   new Fl_Pixmap(left_i_xpm),
+   NULL,
    new Fl_Pixmap(right_xpm),
-   new Fl_Pixmap(right_i_xpm),
+   NULL,
    new Fl_Pixmap(stop_xpm),
-   new Fl_Pixmap(stop_i_xpm),
+   NULL,
 };
 
 static struct iconset small_icons = {
@@ -67,11 +70,11 @@ static struct iconset small_icons = {
    standard_icons.ImgSearch,
    standard_icons.ImgHelp,
    new Fl_Pixmap(left_s_xpm),
-   new Fl_Pixmap(left_si_xpm),
+   NULL,
    new Fl_Pixmap(right_s_xpm),
-   new Fl_Pixmap(right_si_xpm),
+   NULL,
    new Fl_Pixmap(stop_s_xpm),
-   new Fl_Pixmap(stop_si_xpm),
+   NULL,
 };
 
 
@@ -86,11 +89,11 @@ static struct iconset *icons = &standard_icons;
 /*
  * (Used to avoid certain shortcuts in the location bar)
  */
-class CustInput : public Fl_Input {
+class CustInput : public TipWinInput {
 public:
    CustInput (int x, int y, int w, int h, const char* l=0) :
-      Fl_Input(x,y,w,h,l) {};
-   int handle(int e);
+      TipWinInput(x,y,w,h,l) {};
+   virtual int handle(int e);
 };
 
 /*
@@ -146,9 +149,14 @@ int CustInput::handle(int e)
             return 0;
          }
       }
+      if (k == FL_Page_Down || k == FL_Page_Up) {
+         // These do nothing of interest when FL_MULTILINE_INPUT isn't set.
+         // Let them through for key commands.
+         return 0;
+      }
    }
 
-   return Fl_Input::handle(e);
+   return TipWinInput::handle(e);
 }
 
 //----------------------------------------------------------------------------
@@ -156,10 +164,10 @@ int CustInput::handle(int e)
 /*
  * Used to handle "paste" within the toolbar's Clear button.
  */
-class CustPasteButton : public CustLightButton {
+class CustPasteButton : public CustButton {
 public:
    CustPasteButton(int x, int y, int w, int h, const char *l=0) :
-      CustLightButton(x,y,w,h,l) {};
+      CustButton(x,y,w,h,l) {};
    int handle(int e);
 };
 
@@ -173,7 +181,7 @@ int CustPasteButton::handle(int e)
          return 1;
       }
    }
-   return CustLightButton::handle(e);
+   return CustButton::handle(e);
 }
 
 //----------------------------------------------------------------------------
@@ -219,10 +227,6 @@ static void search_cb(Fl_Widget *wid, void *data)
 
    if (b == FL_LEFT_MOUSE) {
       a_UIcmd_search_dialog(a_UIcmd_get_bw_by_widget(wid));
-   } else if (b == FL_MIDDLE_MOUSE) {
-      ((UI*)data)->color_change_cb_i();
-   } else if (b == FL_RIGHT_MOUSE) {
-      // nothing ATM
    }
 }
 
@@ -377,13 +381,13 @@ static void bugmeter_cb(Fl_Widget *wid, void *data)
 /*
  * Make a generic navigation button
  */
-Fl_Button *UI::make_button(const char *label, Fl_Image *img, Fl_Image *deimg,
-                           int b_n, int start)
+CustButton *UI::make_button(const char *label, Fl_Image *img, Fl_Image *deimg,
+                            int b_n, int start)
 {
    if (start)
       p_xpos = 0;
 
-   Fl_Button *b = new CustLightButton(p_xpos, 0, bw, bh, (lbl) ? label : NULL);
+   CustButton *b = new CustButton(p_xpos, 0, bw, bh, (lbl) ? label : NULL);
    if (img)
       b->image(img);
    if (deimg)
@@ -402,6 +406,21 @@ Fl_Button *UI::make_button(const char *label, Fl_Image *img, Fl_Image *deimg,
  */
 void UI::make_toolbar(int tw, int th)
 {
+   if (!icons->ImgLeftIn) {
+      icons->ImgLeftIn = icons->ImgLeft->copy();
+      icons->ImgLeftIn->desaturate();
+      icons->ImgLeftIn->color_average(FL_BACKGROUND_COLOR, .14f);
+   }
+   if (!icons->ImgRightIn) {
+      icons->ImgRightIn = icons->ImgRight->copy();
+      icons->ImgRightIn->desaturate();
+      icons->ImgRightIn->color_average(FL_BACKGROUND_COLOR, .14f);
+   }
+   if (!icons->ImgStopIn) {
+      icons->ImgStopIn = icons->ImgStop->copy();
+      icons->ImgStopIn->desaturate();
+      icons->ImgStopIn->color_average(FL_BACKGROUND_COLOR, .14f);
+   }
    Back = make_button("Back", icons->ImgLeft, icons->ImgLeftIn, UI_BACK, 1);
    Forw = make_button("Forw", icons->ImgRight, icons->ImgRightIn, UI_FORW);
    Home = make_button("Home", icons->ImgHome, NULL, UI_HOME);
@@ -411,14 +430,14 @@ void UI::make_toolbar(int tw, int th)
    Bookmarks = make_button("Book", icons->ImgBook, NULL, UI_BOOK);
    Tools = make_button("Tools", icons->ImgTools, NULL, UI_TOOLS);
 
-   Back->tooltip("Previous page");
-   Forw->tooltip("Next page");
-   Home->tooltip("Go to the Home page");
-   Reload->tooltip("Reload");
-   Save->tooltip("Save this page");
-   Stop->tooltip("Stop loading");
-   Bookmarks->tooltip("View bookmarks");
-   Tools->tooltip("Settings");
+   Back->set_tooltip("Previous page");
+   Forw->set_tooltip("Next page");
+   Home->set_tooltip("Go to the Home page");
+   Reload->set_tooltip("Reload");
+   Save->set_tooltip("Save this page");
+   Stop->set_tooltip("Stop loading");
+   Bookmarks->set_tooltip("View bookmarks");
+   Tools->set_tooltip("Settings");
 }
 
 /*
@@ -426,37 +445,37 @@ void UI::make_toolbar(int tw, int th)
  */
 void UI::make_location(int ww)
 {
-   Fl_Button *b;
+   CustButton *b;
 
-    Clear = b = new CustPasteButton(p_xpos,0,16,lh,0);
+    b = Clear = (CustButton*) new CustPasteButton(p_xpos,0,16,lh,0);
     b->image(icons->ImgClear);
     b->callback(clear_cb, this);
     b->clear_visible_focus();
     b->box(FL_THIN_UP_BOX);
-    b->tooltip("Clear the URL box.\nMiddle-click to paste a URL.");
+    b->set_tooltip("Clear the URL box.\nMiddle-click to paste a URL.");
     p_xpos += b->w();
 
-    Fl_Input *i = Location = new CustInput(p_xpos,0,ww-p_xpos-32,lh,0);
-    i->color(CuteColor);
+    CustInput *i = new CustInput(p_xpos,0,ww-p_xpos-32,lh,0);
+    Location = i;
     i->when(FL_WHEN_ENTER_KEY);
     i->callback(location_cb, this);
-    i->tooltip("Location");
+    i->set_tooltip("Location");
     p_xpos += i->w();
 
-    Search = b = new CustLightButton(p_xpos,0,16,lh,0);
+    Search = b = new CustButton(p_xpos,0,16,lh,0);
     b->image(icons->ImgSearch);
     b->callback(search_cb, this);
     b->clear_visible_focus();
     b->box(FL_THIN_UP_BOX);
-    b->tooltip("Search the Web");
+    b->set_tooltip("Search the Web");
     p_xpos += b->w();
 
-    Help = b = new CustLightButton(p_xpos,0,16,lh,0);
+    Help = b = new CustButton(p_xpos,0,16,lh,0);
     b->image(icons->ImgHelp);
     b->callback(help_cb, this);
     b->clear_visible_focus();
     b->box(FL_THIN_UP_BOX);
-    b->tooltip("Help");
+    b->set_tooltip("Help");
     p_xpos += b->w();
 
 }
@@ -470,15 +489,13 @@ void UI::make_progress_bars(int wide, int thin_up)
     IProg = new CustProgressBox(p_xpos,p_ypos,pw,bh);
     IProg->labelsize(12);
     IProg->box(thin_up ? FL_THIN_UP_BOX : FL_EMBOSSED_BOX);
-    IProg->labelcolor(FL_GRAY_RAMP + 2);
     IProg->update_label(wide ? "Images\n0 of 0" : "0 of 0");
     p_xpos += pw;
     // Page
     PProg = new CustProgressBox(p_xpos,p_ypos,pw,bh);
     PProg->labelsize(12);
     PProg->box(thin_up ? FL_THIN_UP_BOX : FL_EMBOSSED_BOX);
-    PProg->labelcolor(FL_GRAY_RAMP + 2);
-    PProg->update_label(wide ? "Page\n0.0KB" : "0.0KB");
+    PProg->update_label(wide ? "Page\n0.0 KB" : "0.0 KB");
 }
 
 /*
@@ -487,10 +504,10 @@ void UI::make_progress_bars(int wide, int thin_up)
  */
 Fl_Widget *UI::make_filemenu_button()
 {
-   Fl_Button *btn;
+   CustButton *btn;
    int w = 0, h = 0, padding;
 
-   FileButton = btn = new Fl_Button(p_xpos,0,bw,bh,"W");
+   FileButton = btn = new CustButton(p_xpos,0,bw,bh,"W");
    btn->labeltype(FL_FREE_LABELTYPE);
    btn->measure_label(w, h);
    padding = w;
@@ -502,7 +519,7 @@ Fl_Widget *UI::make_filemenu_button()
    _MSG("UI::make_filemenu_button w=%d h=%d padding=%d\n", w, h, padding);
    btn->box(FL_THIN_UP_BOX);
    btn->callback(filemenu_cb, this);
-   btn->tooltip("File menu");
+   btn->set_tooltip("File menu");
    btn->clear_visible_focus();
    if (!prefs.show_filemenu)
       btn->hide();
@@ -605,14 +622,14 @@ void UI::make_status_bar(int ww, int wh)
     StatusOutput->labelsize(8);
     StatusOutput->box(FL_THIN_DOWN_BOX);
     StatusOutput->clear_visible_focus();
-    StatusOutput->color(FL_GRAY_RAMP + 18);
+    StatusOutput->color(FL_BACKGROUND_COLOR);
 
     // Bug Meter
-    BugMeter = new CustLightButton(ww-bm_w,wh-sh,bm_w,sh);
+    BugMeter = new CustButton(ww-bm_w,wh-sh,bm_w,sh);
     BugMeter->image(icons->ImgMeterOK);
     BugMeter->box(FL_THIN_DOWN_BOX);
     BugMeter->align(FL_ALIGN_INSIDE | FL_ALIGN_TEXT_NEXT_TO_IMAGE);
-    BugMeter->tooltip("Show HTML bugs\n(right-click for menu)");
+    BugMeter->set_tooltip("Show HTML bugs\n(right-click for menu)");
     BugMeter->callback(bugmeter_cb, this);
     BugMeter->clear_visible_focus();
 
@@ -630,7 +647,6 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
    LocBar = NavBar = StatusBar = NULL;
 
    Tabs = NULL;
-   TabTooltip = NULL;
    TopGroup = this;
    TopGroup->box(FL_NO_BOX);
    clear_flag(SHORTCUT_LABEL);
@@ -638,14 +654,12 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
    PanelTemporary = false;
    if (cur_ui) {
       PanelSize = cur_ui->PanelSize;
-      CuteColor = cur_ui->CuteColor;
       Small_Icons = cur_ui->Small_Icons;
       Panelmode = cur_ui->Panelmode;
    } else {
      // Set some default values
      PanelSize = prefs.panel_size;
      Small_Icons = prefs.small_icons;
-     CuteColor = 206;
      Panelmode = (prefs.fullwindow_start) ? UI_HIDDEN : UI_NORMAL;
    }
 
@@ -657,11 +671,9 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
     Main = new Fl_Group(0,0,0,0,"Welcome..."); // size is set by rearrange()
     Main->align(FL_ALIGN_CENTER|FL_ALIGN_INSIDE);
     Main->box(FL_FLAT_BOX);
-    Main->color(FL_GRAY_RAMP + 3);
     Main->labelfont(FL_HELVETICA_BOLD_ITALIC);
     Main->labelsize(36);
     Main->labeltype(FL_SHADOW_LABEL);
-    Main->labelcolor(FL_WHITE);
     TopGroup->add(Main);
     TopGroup->resizable(Main);
     MainIdx = TopGroup->find(Main);
@@ -676,7 +688,7 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
    TopGroup->end();
    TopGroup->rearrange();
 
-   customize(0);
+   customize();
 
    if (Panelmode == UI_HIDDEN) {
       panels_toggle();
@@ -689,7 +701,6 @@ UI::UI(int x, int y, int ui_w, int ui_h, const char* label, const UI *cur_ui) :
 UI::~UI()
 {
    _MSG("UI::~UI()\n");
-   dFree(TabTooltip);
 }
 
 /*
@@ -701,16 +712,6 @@ int UI::handle(int event)
 
    int ret = 0;
    if (event == FL_KEYBOARD) {
-      /* WORKAROUND: remove the Panel's fltk-tooltip.
-       * Although the expose event is delivered, it has an offset. This
-       * extra call avoids the lingering tooltip. */
-      if (!Fl::event_inside(Main) &&
-          (Fl::event_inside((Fl_Widget*)tabs()) ||
-           Fl::event_inside(NavBar) ||
-           (LocBar && Fl::event_inside(LocBar)) ||
-           (StatusBar && Fl::event_inside(StatusBar))))
-         window()->damage(FL_DAMAGE_EXPOSE,0,0,1,1);
-
       return 0; // Receive as shortcut
    } else if (event == FL_SHORTCUT) {
       KeysCommand_t cmd = Keys::getKeyCmd();
@@ -739,10 +740,6 @@ int UI::handle(int event)
          a_UIcmd_search_dialog(a_UIcmd_get_bw_by_widget(this));
          ret = 1;
       } else if (cmd == KEYS_GOTO) {
-         if (Panelmode == UI_HIDDEN) {
-            panels_toggle();
-            temporaryPanels(true);
-         }
          focus_location();
          ret = 1;
       } else if (cmd == KEYS_HIDE_PANELS) {
@@ -767,6 +764,11 @@ int UI::handle(int event)
          ret = 1;
       } else if (cmd == KEYS_FILE_MENU) {
          a_UIcmd_file_popup(a_UIcmd_get_bw_by_widget(this), FileButton);
+         ret = 1;
+      } else if (cmd == KEYS_VIEW_SOURCE) {
+         BrowserWindow *bw = a_UIcmd_get_bw_by_widget(this);
+         const DilloUrl *url = a_History_get_url(NAV_TOP_UIDX(bw));
+         a_UIcmd_view_page_source(bw, url);
          ret = 1;
       }
    } else if (event == FL_RELEASE) {
@@ -819,6 +821,10 @@ void UI::set_location(const char *str)
  */
 void UI::focus_location()
 {
+   if (Panelmode == UI_HIDDEN) {
+      panels_toggle();
+      temporaryPanels(true);
+   }
    Location->take_focus();
    // Make text selected when already focused.
    Location->position(Location->size(), 0);
@@ -853,8 +859,18 @@ void UI::set_page_prog(size_t nbytes, int cmd)
    } else {
       PProg->activate();
       if (cmd == 1) {
-         snprintf(str, 32, "%s%.1f KB",
-                  (PanelSize == 0) ? "" : "Page\n", nbytes/1024.0);
+         char prefix;
+         float magnitude;
+
+         if (nbytes >= 1024 * 1024) {
+            prefix = 'M';
+            magnitude = nbytes / (1024 * 1024.0);
+         } else {
+            prefix = 'K';
+            magnitude = nbytes / 1024.0;
+         }
+         snprintf(str, 32, "%s%.1f %cB",
+                  (PanelSize == 0) ? "" : "Page\n", magnitude, prefix);
       } else if (cmd == 2) {
          str[0] = '\0';
       }
@@ -909,10 +925,8 @@ void UI::set_bug_prog(int n_bug)
 /*
  * Customize the UI's panel (show/hide buttons)
  */
-void UI::customize(int flags)
+void UI::customize()
 {
-   // flags argument not currently used
-
    if ( !prefs.show_back )
       Back->hide();
    if ( !prefs.show_forw )
@@ -931,8 +945,6 @@ void UI::customize(int flags)
       Tools->hide();
    if ( !prefs.show_clear_url )
       Clear->hide();
-   if ( !prefs.show_url )
-      Location->hide();
    if ( !prefs.show_search )
       Search->hide();
    if ( !prefs.show_help )
@@ -953,6 +965,8 @@ void UI::customize(int flags)
  */
 void UI::change_panel(int new_size, int small_icons)
 {
+   char *loc_text = dStrdup(Location->value());
+
    // Remove current panel's bars
    init_sizes();
    TopGroup->remove(LocBar);
@@ -967,26 +981,14 @@ void UI::change_panel(int new_size, int small_icons)
 
    // make a new panel
    make_panel(TopGroup->w());
-   customize(0);
+   customize();
    a_UIcmd_set_buttons_sens(a_UIcmd_get_bw_by_widget(this));
 
    TopGroup->rearrange();
+   Location->value(loc_text);
    Location->take_focus();
-}
 
-/*
- * On-the-fly color style change
- */
-void UI::color_change_cb_i()
-{
-   const int cols[] = {7,17,26,51,140,156,205,206,215,-1};
-   static int ncolor = 0;
-
-   ncolor = (cols[ncolor+1] < 0) ? 0 : ncolor + 1;
-   CuteColor = cols[ncolor];
-   MSG("Location color %d\n", CuteColor);
-   Location->color(CuteColor);
-   Location->redraw();
+   dFree(loc_text);
 }
 
 /*
@@ -1081,8 +1083,8 @@ void UI::panels_toggle()
       hide ? NavBar->hide() : NavBar->show();
    }
    if (StatusBar) {
-      hide ? StatusBar->size(0,0) : StatusBar->size(w(),sh);;
-      hide ? StatusBar->hide() : StatusBar->show();;
+      hide ? StatusBar->size(0,0) : StatusBar->size(w(),sh);
+      hide ? StatusBar->hide() : StatusBar->show();
       StatusBar->rearrange();
    }
 

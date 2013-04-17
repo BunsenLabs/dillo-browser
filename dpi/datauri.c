@@ -150,8 +150,8 @@ char *a_Url_decode_hex_str(const char *str, size_t *p_sz)
    }
    *dest = 0;
 
-   new_str = dRealloc(new_str, sizeof(char) * (dest - new_str + 1));
    *p_sz = (size_t)(dest - new_str);
+   new_str = dRealloc(new_str, sizeof(char) * (dest - new_str + 1));
    return new_str;
 }
 
@@ -216,9 +216,6 @@ static void send_failure_message(const char *url, const char *mime_type,
 
 /*
  * Get mime type from the data URI.
- * TODO: there's no point in handling "charset" because current dillo
- * only handles ISO-LATIN-1. The FLTK2 version (utf-8) could use it in the
- * future.
  */
 static char *datauri_get_mime(char *url)
 {
@@ -243,7 +240,7 @@ static char *datauri_get_mime(char *url)
       if (len == 0) {
          mime_type = dStrdup("text/plain;charset=US-ASCII");
       } else if (!dStrnAsciiCasecmp(buf, "charset", 7)) {
-         mime_type = dStrconcat("text/plain", buf, NULL);
+         mime_type = dStrconcat("text/plain;", buf, NULL);
       } else {
          mime_type = dStrdup(buf);
       }

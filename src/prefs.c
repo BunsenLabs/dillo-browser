@@ -41,7 +41,6 @@ void a_Prefs_init(void)
    prefs.buffered_drawing = 1;
    prefs.contrast_visited_color = TRUE;
    prefs.enterpress_forces_submit = FALSE;
-   prefs.filter_auto_requests = PREFS_FILTER_SAME_DOMAIN;
    prefs.focus_new_tab = TRUE;
    prefs.font_cursive = dStrdup(PREFS_FONT_CURSIVE);
    prefs.font_factor = 1.0;
@@ -97,11 +96,25 @@ void a_Prefs_init(void)
    prefs.show_stop = TRUE;
    prefs.show_tools = TRUE;
    prefs.show_tooltip = TRUE;
-   prefs.show_url = TRUE;
    prefs.small_icons = FALSE;
    prefs.start_page = a_Url_new(PREFS_START_PAGE, NULL);
    prefs.theme = dStrdup(PREFS_THEME);
+   prefs.ui_button_highlight_color = -1;
+   prefs.ui_fg_color = -1;
+   prefs.ui_main_bg_color = -1;
+   prefs.ui_selection_color = -1;
+   prefs.ui_tab_active_bg_color = -1;
+   prefs.ui_tab_bg_color = -1;
+   prefs.ui_tab_active_fg_color = -1;
+   prefs.ui_tab_fg_color = -1;
+   prefs.ui_text_bg_color = -1;
    prefs.w3c_plus_heuristics = TRUE;
+
+   prefs.penalty_hyphen = 100;
+   prefs.penalty_hyphen_2 = 800;
+   prefs.penalty_em_dash_left = 800;
+   prefs.penalty_em_dash_right = 100;
+   prefs.penalty_em_dash_right_2 = 800;
 }
 
 /*

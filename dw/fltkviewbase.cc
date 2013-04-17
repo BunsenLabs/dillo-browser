@@ -216,6 +216,76 @@ core::ButtonState getDwButtonState ()
    return (core::ButtonState)s2;
 }
 
+/*
+ * We handle Tab to determine which FLTK widget should get focus.
+ *
+ * Presumably a proper solution that allows focusing links, etc., would live
+ * in Textblock and use iterators.
+ */
+int FltkViewBase::manageTabToFocus()
+{
+   int i, ret = 0;
+   Fl_Widget *old_child = NULL;
+
+   if (this == Fl::focus()) {
+      // if we have focus, give it to a child. Go forward typically,
+      // or backward with Shift pressed.
+      if (!(Fl::event_state() & FL_SHIFT)) {
+         for (i = 0; i < children(); i++) {
+            if (child(i)->take_focus()) {
+               ret = 1;
+               break;
+            }
+         }
+      } else {
+         for (i = children() - 1; i >= 0; i--) {
+            if (child(i)->take_focus()) {
+               ret = 1;
+               break;
+            }
+         }
+      }
+   } else {
+      // tabbing between children
+      old_child = Fl::focus();
+
+      if (!(ret = Fl_Group::handle (FL_KEYBOARD))) {
+         // group didn't have any more children to focus.
+         Fl::focus(this);
+         return 1;
+      } else {
+         // which one did it focus? (Note i == children() if not found)
+         i = find(Fl::focus());
+      }
+   }
+   if (ret) {
+      if (i >= 0 && i < children()) {
+         Fl_Widget *c = child(i);
+         int canvasX = translateViewXToCanvasX(c->x()),
+             canvasY = translateViewYToCanvasY(c->y());
+
+         theLayout->scrollTo(core::HPOS_INTO_VIEW, core::VPOS_INTO_VIEW,
+                             canvasX, canvasY, c->w(), c->h());
+
+         // Draw the children who gained and lost focus. Otherwise a
+         // widget that had been only partly visible still shows its old
+         // appearance in the previously-visible portion.
+         core::Rectangle r(canvasX, canvasY, c->w(), c->h());
+
+         queueDraw(&r);
+
+         if (old_child) {
+            r.x = translateViewXToCanvasX(old_child->x());
+            r.y = translateViewYToCanvasY(old_child->y());
+            r.width = old_child->w();
+            r.height = old_child->h();
+            queueDraw(&r);
+         }
+      }
+   }
+   return ret;
+}
+
 int FltkViewBase::handle (int event)
 {
    bool processed;
@@ -238,7 +308,8 @@ int FltkViewBase::handle (int event)
       _MSG("PUSH => %s\n", processed ? "true" : "false");
       if (processed) {
          /* pressed dw content; give focus to the view */
-         Fl::focus(this);
+         if (Fl::event_button() != FL_RIGHT_MOUSE)
+            Fl::focus(this);
          return true;
       }
       break;
@@ -295,6 +366,10 @@ int FltkViewBase::handle (int event)
    case FL_UNFOCUS:
       focused_child = fl_oldfocus;
       return 0;
+   case FL_KEYBOARD:
+      if (Fl::event_key() == FL_Tab)
+         return manageTabToFocus();
+      break;
    default:
       break;
    }
@@ -357,7 +432,6 @@ void FltkViewBase::finishDrawing (core::Rectangle *area)
 void FltkViewBase::queueDraw (core::Rectangle *area)
 {
    drawRegion.addRectangle (area);
-   /** DAMAGE_VALUE is just an arbitrary value other than DAMAGE_EXPOSE here */
    damage (FL_DAMAGE_USER1);
 }
 
@@ -472,8 +546,11 @@ void FltkViewBase::drawArc (core::style::Color *color,
    int y = translateCanvasYToViewY (centerY) - height / 2;
 
    fl_arc(x, y, width, height, angle1, angle2);
-   if (filled)
+   if (filled) {
+      // WORKAROUND: We call both fl_arc and fl_pie due to a FLTK bug
+      // (STR #2703) that was present in 1.3.0.
       fl_pie(x, y, width, height, angle1, angle2);
+   }
 }
 
 void FltkViewBase::drawPolygon (core::style::Color *color,
@@ -531,10 +608,15 @@ FltkWidgetView::~FltkWidgetView ()
 }
 
 void FltkWidgetView::drawText (core::style::Font *font,
-                             core::style::Color *color,
-                             core::style::Color::Shading shading,
-                             int X, int Y, const char *text, int len)
+                               core::style::Color *color,
+                               core::style::Color::Shading shading,
+                               int X, int Y, const char *text, int len)
 {
+   //printf ("drawText (..., %d, %d, '", X, Y);
+   //for (int i = 0; i < len; i++)
+   //   putchar (text[i]);
+   //printf ("'\n");
+
    FltkFont *ff = (FltkFont*)font;
    fl_font(ff->font, ff->size);
    fl_color(((FltkColor*)color)->colors[shading]);

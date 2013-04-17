@@ -12,9 +12,13 @@
 // Functions/Methods for commands triggered from the UI
 
 
+#include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>     /* for qsort */
 #include <math.h>       /* for rint */
+#include <limits.h>     /* for UINT_MAX */
+#include <sys/stat.h>
 
 #include <FL/Fl.H>
 #include <FL/Fl_Widget.H>
@@ -59,7 +63,7 @@ using namespace dw::fltk;
 /*
  * Local data
  */
-static char *save_dir = NULL;
+static const char *save_dir = "";
 
 /*
  * Forward declarations
@@ -78,36 +82,61 @@ static void close_tab_btn_cb (Fl_Widget *w, void *cb_data);
  */
 class CustTabButton : public Fl_Button {
    UI *ui_;
+   uint_t focus_num_; // Used to choose which tab to focus when closing the
+                      // active one (the highest numbered gets focus).
 public:
    CustTabButton (int x,int y,int w,int h, const char* label = 0) :
-      Fl_Button (x,y,w,h,label) { ui_ = NULL; };
+      Fl_Button (x,y,w,h,label) { ui_ = NULL; focus_num_ = 0; };
    void ui(UI *pui) { ui_ = pui; }
    UI *ui(void) { return ui_; }
+   void focus_num(uint_t fn) { focus_num_ = fn; }
+   uint_t focus_num(void) { return focus_num_; }
 };
+
+static int btn_cmp(const void *p1, const void *p2)
+{
+   return ((*(CustTabButton * const *)p1)->focus_num() -
+           (*(CustTabButton * const *)p2)->focus_num() );
+}
 
 /*
  * Allows fine control of the tabbed interface
  */
 class CustTabs : public Fl_Group {
+   uint_t focus_counter; // An increasing counter
    int tab_w, tab_h, ctab_h, btn_w, ctl_w;
    Fl_Wizard *Wizard;
    Fl_Scroll *Scroll;
    Fl_Pack *Pack;
    Fl_Group *Control;
-   CustLightButton *CloseBtn;
-   int tabcolor_inactive, tabcolor_active;
+   CustButton *CloseBtn;
 
    void update_pack_offset(void);
    void resize(int x, int y, int w, int h)
       { Fl_Group::resize(x,y,w,h); update_pack_offset(); }
    int get_btn_idx(UI *ui);
+   void increase_focus_counter() {
+      if (focus_counter < UINT_MAX) /* check for overflow */
+         ++focus_counter;
+      else {
+         /* wrap & normalize old numbers here */
+         CustTabButton **btns = dNew(CustTabButton*, num_tabs());
+         for (int i = 0; i < num_tabs(); ++i)
+            btns[i] = (CustTabButton*)Pack->child(i);
+         qsort(btns, num_tabs(), sizeof(CustTabButton *), btn_cmp);
+         focus_counter = 0; 
+         for (int i = 0; i < num_tabs(); ++i)
+            btns[i]->focus_num(focus_counter++);
+         dFree(btns);
+      }
+   }
 
 public:
    CustTabs (int ww, int wh, int th, const char *lbl=0) :
       Fl_Group(0,0,ww,th,lbl) {
       Pack = NULL;
+      focus_counter = 0;
       tab_w = 50, tab_h = th, ctab_h = 1, btn_w = 20, ctl_w = 1*btn_w+2;
-      tabcolor_active = 0x87aca700; tabcolor_inactive = 0xb7beb700;
       resize(0,0,ww,ctab_h);
       /* tab buttons go inside a pack within a scroll */
       Scroll = new Fl_Scroll(0,0,ww-ctl_w,ctab_h);
@@ -122,12 +151,10 @@ public:
 
       /* control buttons go inside a group */
       Control = new Fl_Group(ww-ctl_w,0,ctl_w,ctab_h);
-       CloseBtn = new CustLightButton(ww-ctl_w+2,0,btn_w,ctab_h, "X");
+       CloseBtn = new CustButton(ww-ctl_w+2,0,btn_w,ctab_h, "X");
        CloseBtn->box(FL_THIN_UP_BOX);
-       CloseBtn->labelcolor(0x00641000);
-       CloseBtn->hl_color(FL_WHITE);
        CloseBtn->clear_visible_focus();
-       CloseBtn->tooltip(prefs.right_click_closes_tab ?
+       CloseBtn->set_tooltip(prefs.right_click_closes_tab ?
           "Close current tab.\nor Right-click tab label to close." :
           "Close current tab.\nor Middle-click tab label to close.");
        CloseBtn->callback(close_tab_btn_cb, this);
@@ -253,16 +280,23 @@ UI *CustTabs::add_new_tab(UI *old_ui, int focus)
    btn->copy_label(DEFAULT_TAB_LABEL);
    btn->clear_visible_focus();
    btn->box(FL_GTK_THIN_UP_BOX);
-   btn->color(focus ? tabcolor_active : tabcolor_inactive);
+   btn->color(focus ? PREFS_UI_TAB_ACTIVE_BG_COLOR : PREFS_UI_TAB_BG_COLOR);
+   btn->labelcolor(focus ? PREFS_UI_TAB_ACTIVE_FG_COLOR:PREFS_UI_TAB_FG_COLOR);
    btn->ui(new_ui);
    btn->callback(tab_btn_cb, this);
    Pack->add(btn); // append
 
    if (focus) {
       switch_tab(btn);
-   } else if (num_tabs() == 2) {
-      // no focus and tabbar added: redraw current page
-      Wizard->redraw();
+   } else {        // no focus
+      // set focus counter
+      increase_focus_counter();
+      btn->focus_num(focus_counter);
+
+      if (num_tabs() == 2) {
+         // tabbar added: redraw current page
+         Wizard->redraw();
+      }
    }
    if (num_tabs() == 1)
       btn->hide();
@@ -285,8 +319,18 @@ void CustTabs::remove_tab(UI *ui)
    btn = (CustTabButton*)Pack->child(rm_idx);
 
    if (act_idx == rm_idx) {
-      // Active tab is being closed, switch to another one
-      rm_idx > 0 ? prev_tab() : next_tab();
+      // Active tab is being closed, switch to the "previous" one
+      CustTabButton *fbtn = NULL;
+      for (int i = 0; i < num_tabs(); ++i) {
+         if (i != rm_idx) {
+            if (!fbtn)
+               fbtn = (CustTabButton*)Pack->child(i);
+            CustTabButton *btn = (CustTabButton*)Pack->child(i);
+            if (btn->focus_num() > fbtn->focus_num())
+               fbtn = btn;
+         }
+      }
+      switch_tab(fbtn);
    }
    Pack->remove(rm_idx);
    update_pack_offset();
@@ -361,15 +405,27 @@ void CustTabs::switch_tab(CustTabButton *cbtn)
    BrowserWindow *bw;
    UI *old_ui = (UI*)Wizard->value();
 
-   if (cbtn->ui() != old_ui) {
+   if (cbtn && cbtn->ui() != old_ui) {
       // Set old tab label to normal color
       if ((idx = get_btn_idx(old_ui)) != -1) {
          btn = (CustTabButton*)Pack->child(idx);
-         btn->color(tabcolor_inactive);
+         btn->color(PREFS_UI_TAB_BG_COLOR);
+         btn->labelcolor(PREFS_UI_TAB_FG_COLOR);
          btn->redraw();
       }
+      /* We make a point of calling show() before value() is changed because
+       * the wizard may hide the old one before showing the new one. In that
+       * case, the new UI gets focus with Fl::e_keysym set to whatever
+       * triggered the switch, and this is a problem when it's Tab/Left/Right/
+       * Up/Down because some widgets (notably Fl_Group and Fl_Input) exhibit
+       * unwelcome behaviour in that case. If the new widgets are already
+       * shown, fl_fix_focus will fix everything with Fl::e_keysym temporarily
+       * cleared.
+       */
+      cbtn->ui()->show();
       Wizard->value(cbtn->ui());
-      cbtn->color(tabcolor_active);
+      cbtn->color(PREFS_UI_TAB_ACTIVE_BG_COLOR);
+      cbtn->labelcolor(PREFS_UI_TAB_ACTIVE_FG_COLOR);
       cbtn->redraw();
       update_pack_offset();
 
@@ -378,6 +434,9 @@ void CustTabs::switch_tab(CustTabButton *cbtn)
          const char *title = (cbtn->ui())->label();
          cbtn->window()->copy_label(title ? title : "");
       }
+      // Update focus priority
+      increase_focus_counter();
+      cbtn->focus_num(focus_counter);
    }
 }
 
@@ -433,9 +492,16 @@ static void win_cb (Fl_Widget *w, void *cb_data) {
    CustTabs *tabs = (CustTabs*) cb_data;
    int choice = 1, ntabs = tabs->num_tabs();
 
+   if (Fl::event_key() == FL_Escape) {
+      // Don't let FLTK close a browser window due to unhandled Escape
+      // (most likely with modifiers).
+      return;
+   }
+      
    if (prefs.show_quit_dialog && ntabs > 1)
-      choice = a_Dialog_choice5("Window contains more than one tab.",
-                                "Close", "Cancel", NULL, NULL, NULL);
+      choice = a_Dialog_choice("Dillo: Close window?",
+                               "Window contains more than one tab.",
+                               "Close", "Cancel", NULL);
    if (choice == 1)
       while (ntabs-- > 0)
          a_UIcmd_close_bw(a_UIcmd_get_bw_by_widget(tabs->wizard()->value()));
@@ -574,8 +640,9 @@ void a_UIcmd_close_all_bw(void *)
    int choice = 1;
 
    if (prefs.show_quit_dialog && a_Bw_num() > 1)
-      choice = a_Dialog_choice5("More than one open tab or window.",
-         "Quit", "Cancel", NULL, NULL, NULL);
+      choice = a_Dialog_choice("Dillo: Quit?",
+                               "More than one open tab or window.",
+                               "Quit", "Cancel", NULL);
    if (choice == 1)
       while ((bw = a_Bw_get(0)))
          a_UIcmd_close_bw((void*)bw);
@@ -643,6 +710,7 @@ static void UIcmd_open_url_nbw(BrowserWindow *new_bw, const DilloUrl *url)
     */
    if (url) {
       a_Nav_push(new_bw, url, NULL);
+      a_UIcmd_set_location_text(new_bw, URL_STR(url));
       BW2UI(new_bw)->focus_main();
    } else {
       BW2UI(new_bw)->focus_location();
@@ -742,51 +810,123 @@ void a_UIcmd_redirection0(void *vbw, const DilloUrl *url)
 /*
  * Return a suitable filename for a given URL path.
  */
-static char *UIcmd_make_save_filename(const char *pathstr)
+static char *UIcmd_make_save_filename(const DilloUrl *url)
 {
    size_t MaxLen = 64;
-   char *FileName, *newname, *o, *n;
-   const char *name, *dir = a_UIcmd_get_save_dir();
+   const char *dir = save_dir, *path, *path2, *query;
+   char *name, *free1, *free2, *n1, *n2;
 
-   if ((name = strrchr(pathstr, '/'))) {
-      if (strlen(++name) > MaxLen) {
-         name = name + strlen(name) - MaxLen;
-      }
-      /* Replace %20 and ' ' with '_' in Filename */
-      o = n = newname = dStrdup(name);
-      for (int i = 0; o[i]; i++) {
-         *n++ = (o[i] == ' ') ? '_' :
-                (o[i] == '%' && o[i+1] == '2' && o[i+2] == '0') ?
-                i+=2, '_' : o[i];
-      }
-      *n = 0;
-      FileName = dStrconcat(dir ? dir : "", newname, NULL);
-      dFree(newname);
-   } else {
-      FileName = dStrconcat(dir ? dir : "", pathstr, NULL);
+   free1 = free2 = NULL;
+
+   /* get the last component of the path */
+   path = URL_PATH(url);
+   path2 = strrchr(path, '/');
+   path = path2 ? path2 + 1 : path;
+
+   /* truncate the path if necessary */
+   if (strlen(path) > MaxLen) {
+      path = free1 = dStrndup(path, MaxLen);
    }
-   return FileName;
-}
 
-/*
- * Get the default directory for saving files.
- */
-const char *a_UIcmd_get_save_dir()
-{
-   return save_dir;
+   /* is there a query? */
+   query = URL_QUERY(url);
+   if (*query) {
+      /* truncate the query if necessary */
+      if (strlen(query) > MaxLen) {
+         query = free2 = dStrndup(query, MaxLen);
+      }
+      name = dStrconcat(dir, path, "?", query, NULL);
+   } else {
+      name = dStrconcat(dir, path, NULL);
+   }
+
+   dFree(free1);
+   dFree(free2);
+
+   /* Replace %20 and ' ' with '_' */
+   for (n1 = n2 = name; *n1; n1++, n2++) {
+      *n2 =
+         (n1[0] == ' ')
+         ? '_' :
+         (n1[0] == '%' && n1[1] == '2' && n1[2] == '0')
+         ? (n1 += 2, '_') :
+         n1[0];
+   }
+   *n2 = 0;
+
+   return name;
 }
 
 /*
  * Set the default directory for saving files.
  */
-void a_UIcmd_set_save_dir(const char *dir)
+void a_UIcmd_init(void)
 {
-   const char *p;
+   const char *dir = prefs.save_dir;
 
-   if (dir && (p = strrchr(dir, '/'))) {
-      dFree(save_dir);
+   if (dir && *dir) {
       // assert a trailing '/'
-      save_dir = dStrconcat(dir, (p[1] != 0) ? "/" : "", NULL);
+      save_dir =
+         (dir[strlen(dir)-1] == '/')
+         ? dStrdup(dir)
+         : dStrconcat(dir, "/", NULL);
+   }
+}
+
+/*
+ * Check a file to save to.
+ */
+static int UIcmd_save_file_check(const char *name)
+{
+   struct stat ss;
+   if (stat(name, &ss) == 0) {
+      Dstr *ds;
+      int ch;
+      ds = dStr_sized_new(128);
+      dStr_sprintf(ds,
+                   "The file:\n  %s (%d Bytes)\nalready exists. What do we do?",
+                   name, (int)ss.st_size);
+      ch = a_Dialog_choice("Dillo Save: File exists!", ds->str,
+                           "Abort", "Continue", "Rename", NULL);
+      dStr_free(ds, 1);
+      return ch;
+   } else {
+      return 2; /* assume the file does not exist, so Continue */
+   }
+}
+
+/*
+ * Save a URL
+ */
+static void UIcmd_save(BrowserWindow *bw, const DilloUrl *url,
+                       const char *title)
+{
+   char *SuggestedName = UIcmd_make_save_filename(url);
+
+   while (1) {
+      const char *name = a_Dialog_save_file(title, NULL, SuggestedName);
+      dFree(SuggestedName);
+
+      if (name) {
+         switch (UIcmd_save_file_check(name)) {
+         case 0:
+         case 1:
+            /* Abort */
+            return;
+         case 2:
+            /* Continue */
+            MSG("UIcmd_save: %s\n", name);
+            a_Nav_save_url(bw, url, name);
+            return;
+         default:
+            /* Rename */
+            break; /* prompt again */
+         }
+      } else {
+         return; /* no name, so Abort */
+      }
+
+      SuggestedName = dStrdup(name);
    }
 }
 
@@ -795,21 +935,11 @@ void a_UIcmd_set_save_dir(const char *dir)
  */
 void a_UIcmd_save(void *vbw)
 {
-   const char *name;
-   char *SuggestedName;
    BrowserWindow *bw = (BrowserWindow *)vbw;
    const DilloUrl *url = a_History_get_url(NAV_TOP_UIDX(bw));
 
    if (url) {
-      a_UIcmd_set_save_dir(prefs.save_dir);
-      SuggestedName = UIcmd_make_save_filename(URL_PATH(url));
-      name = a_Dialog_save_file("Save Page as File", NULL, SuggestedName);
-      MSG("a_UIcmd_save: %s\n", name);
-      dFree(SuggestedName);
-
-      if (name) {
-         a_Nav_save_url(bw, url, name);
-      }
+      UIcmd_save(bw, url, "Save Page as File");
    }
 }
 
@@ -818,7 +948,7 @@ void a_UIcmd_save(void *vbw)
  */
 const char *a_UIcmd_select_file()
 {
-   return a_Dialog_select_file("Select a File", NULL, NULL);
+   return a_Dialog_select_file("Dillo: Select a File", NULL, NULL);
 }
 
 /*
@@ -851,7 +981,7 @@ void a_UIcmd_open_file(void *vbw)
    char *name;
    DilloUrl *url;
 
-   name = a_Dialog_open_file("Open File", NULL, "");
+   name = a_Dialog_open_file("Dillo: Open File", NULL, "");
 
    if (name) {
       url = a_Url_new(name, "file:");
@@ -879,11 +1009,11 @@ static char *UIcmd_make_search_str(const char *str)
          if (*c == '%')
             switch(*++c) {
             case 's':
-               dStr_append(ds, keys); break;;
+               dStr_append(ds, keys); break;
             case '%':
-               dStr_append_c(ds, '%'); break;;
+               dStr_append_c(ds, '%'); break;
             case 0:
-               MSG_WARN("search_url ends with '%%'\n"); c--; break;;
+               MSG_WARN("search_url ends with '%%'\n"); c--; break;
             default:
                MSG_WARN("illegal specifier '%%%c' in search_url\n", *c);
             }
@@ -905,7 +1035,7 @@ void a_UIcmd_search_dialog(void *vbw)
 {
    const char *query;
 
-   if ((query = a_Dialog_input("Search the Web:"))) {
+   if ((query = a_Dialog_input("Dillo: Search", "Search the Web:"))) {
       char *url_str = UIcmd_make_search_str(query);
       a_UIcmd_open_urlstr(vbw, url_str);
       dFree(url_str);
@@ -918,9 +1048,10 @@ void a_UIcmd_search_dialog(void *vbw)
 const char *a_UIcmd_get_passwd(const char *user)
 {
    const char *passwd;
-   char *prompt = dStrconcat("Password for user \"", user, "\"", NULL);
-   passwd = a_Dialog_passwd(prompt);
-   dFree(prompt);
+   const char *title = "Dillo: Password";
+   char *msg = dStrconcat("Password for user \"", user, "\"", NULL);
+   passwd = a_Dialog_passwd(title, msg);
+   dFree(msg);
    return passwd;
 }
 
@@ -929,17 +1060,7 @@ const char *a_UIcmd_get_passwd(const char *user)
  */
 void a_UIcmd_save_link(BrowserWindow *bw, const DilloUrl *url)
 {
-   const char *name;
-   char *SuggestedName;
-
-   a_UIcmd_set_save_dir(prefs.save_dir);
-
-   SuggestedName = UIcmd_make_save_filename(URL_STR(url));
-   if ((name = a_Dialog_save_file("Save Link as File", NULL, SuggestedName))) {
-      MSG("a_UIcmd_save_link: %s\n", name);
-      a_Nav_save_url(bw, url, name);
-   }
-   dFree(SuggestedName);
+   UIcmd_save(bw, url, "Dillo: Save Link as File");
 }
 
 /*
@@ -1019,14 +1140,18 @@ void a_UIcmd_copy_urlstr(BrowserWindow *bw, const char *urlstr)
  */
 void a_UIcmd_view_page_source(BrowserWindow *bw, const DilloUrl *url)
 {
-   char *buf;
+   char *buf, *major;
    int buf_size;
    Dstr *dstr_url;
    DilloUrl *vs_url;
    static int post_id = 0;
    char tag[8];
+   const char *content_type = a_Nav_get_content_type(url);
 
-   if (a_Nav_get_buf(url, &buf, &buf_size)) {
+   a_Misc_parse_content_type(content_type, &major, NULL, NULL);
+
+   if (major && dStrAsciiCasecmp(major, "image") &&
+       a_Nav_get_buf(url, &buf, &buf_size)) {
       a_Nav_set_vsource_url(url);
       dstr_url = dStr_new("dpi:/vsource/:");
       dStr_append(dstr_url, URL_STR(url));
@@ -1042,6 +1167,7 @@ void a_UIcmd_view_page_source(BrowserWindow *bw, const DilloUrl *url)
       dStr_free(dstr_url, 1);
       a_Nav_unref_buf(url);
    }
+   dFree(major);
 }
 
 /*
@@ -1052,9 +1178,9 @@ void a_UIcmd_view_page_bugs(void *vbw)
    BrowserWindow *bw = (BrowserWindow*)vbw;
 
    if (bw->num_page_bugs > 0) {
-      a_Dialog_text_window(bw->page_bugs->str, "Detected HTML errors");
+      a_Dialog_text_window("Dillo: Detected HTML errors", bw->page_bugs->str);
    } else {
-      a_Dialog_msg("Zero detected HTML errors!");
+      a_Dialog_msg("Dillo: Valid HTML!", "Zero detected HTML errors!");
    }
 }
 
@@ -1177,7 +1303,7 @@ void a_UIcmd_scroll(BrowserWindow *bw, int icmd)
       };
       KeysCommand_t keycmd = (KeysCommand_t)icmd;
 
-      for (uint_t i = 0; i < (sizeof(map)/sizeof(mapping_t)); i++) {
+      for (uint_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
          if (keycmd == map[i].keys_cmd) {
             layout->scroll(map[i].dw_cmd);
             break;

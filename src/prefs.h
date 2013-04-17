@@ -23,15 +23,17 @@ extern "C" {
 #define PREFS_GEOMETRY_DEFAULT_XPOS  -9999
 #define PREFS_GEOMETRY_DEFAULT_YPOS  -9999
 
+/* FLTK has free color indices from 16 to 31 */
+#define PREFS_UI_BUTTON_HIGHLIGHT_COLOR 16
+#define PREFS_UI_TAB_ACTIVE_BG_COLOR 17
+#define PREFS_UI_TAB_ACTIVE_FG_COLOR 18
+#define PREFS_UI_TAB_BG_COLOR 19
+#define PREFS_UI_TAB_FG_COLOR 20
+
 /* Panel sizes */
 enum { P_tiny = 0, P_small, P_medium };
 
-enum {PREFS_FILTER_ALLOW_ALL,
-      PREFS_FILTER_SAME_DOMAIN};
-
-typedef struct _DilloPrefs DilloPrefs;
-
-struct _DilloPrefs {
+typedef struct {
    int width;
    int height;
    int xpos;
@@ -47,6 +49,15 @@ struct _DilloPrefs {
    DilloUrl *home;
    bool_t allow_white_bg;
    int32_t bg_color;
+   int32_t ui_button_highlight_color;
+   int32_t ui_fg_color;
+   int32_t ui_main_bg_color;
+   int32_t ui_selection_color;
+   int32_t ui_tab_active_bg_color;
+   int32_t ui_tab_active_fg_color;
+   int32_t ui_tab_bg_color;
+   int32_t ui_tab_fg_color;
+   int32_t ui_text_bg_color;
    bool_t contrast_visited_color;
    bool_t show_tooltip;
    char *theme;
@@ -68,7 +79,6 @@ struct _DilloPrefs {
    bool_t show_tools;
    bool_t show_filemenu;
    bool_t show_clear_url;
-   bool_t show_url;
    bool_t show_search;
    bool_t show_help;
    bool_t show_progress_box;
@@ -77,7 +87,6 @@ struct _DilloPrefs {
    bool_t load_images;
    bool_t load_stylesheets;
    bool_t parse_embedded_css;
-   int filter_auto_requests;
    int32_t buffered_drawing;
    char *font_serif;
    char *font_sans_serif;
@@ -93,7 +102,9 @@ struct _DilloPrefs {
    bool_t show_msg;
    bool_t show_extra_warnings;
    bool_t middle_click_drags_page;
-};
+   int penalty_hyphen, penalty_hyphen_2;
+   int penalty_em_dash_left, penalty_em_dash_right, penalty_em_dash_right_2;
+} DilloPrefs;
 
 /* Global Data */
 extern DilloPrefs prefs;

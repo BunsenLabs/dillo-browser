@@ -123,8 +123,8 @@ FltkFont::FltkFont (core::style::FontAttrs *attrs)
    font = family->get (fa);
 
    fl_font(font, size);
-   /* WORKAROUND: fl_width(uint_t) is not working on non-xft X.
-    * Reported to FLTK as STR #2688 */
+   // WORKAROUND: A bug with fl_width(uint_t) on non-xft X was present in
+   // 1.3.0 (STR #2688).
    spaceWidth = misc::max(0, (int)fl_width(" ") + letterSpacing);
    int xx, xy, xw, xh;
    fl_text_extents("x", xx, xy, xw, xh);
@@ -419,11 +419,11 @@ FltkPlatform::FltkResourceFactory::createOptionMenuResource ()
 }
 
 core::ui::EntryResource *
-FltkPlatform::FltkResourceFactory::createEntryResource (int maxLength,
+FltkPlatform::FltkResourceFactory::createEntryResource (int size,
                                                         bool password,
                                                         const char *label)
 {
-   return new ui::FltkEntryResource (platform, maxLength, password, label);
+   return new ui::FltkEntryResource (platform, size, password, label);
 }
 
 core::ui::MultiLineTextResource *
@@ -493,7 +493,7 @@ void FltkPlatform::attachView (core::View *view)
 }
 
 
-void FltkPlatform::detachView  (core::View *view)
+void FltkPlatform::detachView (core::View *view)
 {
    if (this->view != view)
       MSG_ERR("FltkPlatform::detachView: this->view: %p view: %p\n",

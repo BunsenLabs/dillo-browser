@@ -75,8 +75,9 @@
 
 #ifdef ENABLE_SSL
 
-#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <openssl/rand.h>
+#include <openssl/ssl.h>
 
 static int get_network_connection(char * url);
 static int handle_certificate_problem(SSL * ssl_connection);
@@ -153,6 +154,11 @@ static void yes_ssl_support(void)
          MSG("Error creating SSL context\n");
          exit_error = 1;
       }
+   }
+
+   /* Do not use the SSLv2 protocol. */
+   if (exit_error == 0){
+      SSL_CTX_set_options(ssl_context, SSL_OP_NO_SSLv2);
    }
 
    /*Set directory to load certificates from*/
@@ -286,6 +292,7 @@ static void yes_ssl_support(void)
       /*Actually do SSL connection handshake*/
       if (SSL_connect(ssl_connection) != 1){
          MSG("SSL_connect failed\n");
+         ERR_print_errors_fp(stderr);
          exit_error = 1;
       }
    }
@@ -330,7 +337,7 @@ static void yes_ssl_support(void)
    dFree(check_cert);
 
    if (network_socket != -1){
-      close(network_socket);
+      dClose(network_socket);
       network_socket = -1;
    }
    if (ssl_connection != NULL){
@@ -402,7 +409,7 @@ static int get_network_connection(char * url)
 
    s = socket(hp->h_addrtype, SOCK_STREAM, 0);
    if (connect(s, (struct sockaddr *)&address, sizeof(address)) != 0){
-      close(s);
+      dClose(s);
       s = -1;
       MSG("errno: %i\n", errno);
    }
@@ -434,8 +441,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
    if (remote_cert == NULL){
       /*Inform user that remote system cannot be trusted*/
       d_cmd = a_Dpip_build_cmd(
-         "cmd=%s msg=%s alt1=%s alt2=%s",
+         "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
          "dialog",
+         "Dillo HTTPS: No certificate!",
          "The remote system is NOT presenting a certificate.\n"
          "This site CAN NOT be trusted. Sending data is NOT SAFE.\n"
          "What do I do?",
@@ -477,8 +485,10 @@ static int handle_certificate_problem(SSL * ssl_connection)
          msg = dStrconcat("The remote certificate is self-signed and "
                           "untrusted.\nFor address: ", buf, NULL);
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s alt3=%s",
-            "dialog", msg, "Continue", "Cancel", "Save Certificate");
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s alt3=%s",
+            "dialog",
+            "Dillo HTTPS: Untrusted certificate!", msg,
+            "Continue", "Cancel", "Save Certificate");
          a_Dpip_dsh_write_str(sh, 1, d_cmd);
          dFree(d_cmd);
          dFree(msg);
@@ -504,8 +514,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
       case X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Missing certificate issuer!",
             "The issuer for the remote certificate cannot be found\n"
             "The authenticity of the remote certificate cannot be trusted",
             "Continue", "Cancel");
@@ -523,8 +534,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_CERT_SIGNATURE_FAILURE:
       case X509_V_ERR_CRL_SIGNATURE_FAILURE:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Invalid certificate!",
             "The remote certificate signature could not be read\n"
             "or is invalid and should not be trusted",
             "Continue", "Cancel");
@@ -539,8 +551,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_CERT_NOT_YET_VALID:
       case X509_V_ERR_CRL_NOT_YET_VALID:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Certificate not yet valid!",
             "Part of the remote certificate is not yet valid\n"
             "Certificates usually have a range of dates over which\n"
             "they are to be considered valid, and the certificate\n"
@@ -558,8 +571,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_CERT_HAS_EXPIRED:
       case X509_V_ERR_CRL_HAS_EXPIRED:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Expired certificate!",
             "The remote certificate has expired.  The certificate\n"
             "wasn't designed to last this long. You should avoid \n"
             "this site.",
@@ -576,8 +590,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD:
       case X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Certificate error!",
             "There was an error in the certificate presented.\n"
             "Some of the certificate data was improperly formatted\n"
             "making it impossible to determine if the certificate\n"
@@ -596,8 +611,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_CERT_REJECTED:
       case X509_V_ERR_KEYUSAGE_NO_CERTSIGN:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Certificate chain error!",
             "One of the certificates in the chain is being used\n"
             "incorrectly (possibly due to configuration problems\n"
             "with the remote system.  The connection should not\n"
@@ -614,8 +630,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
       case X509_V_ERR_AKID_SKID_MISMATCH:
       case X509_V_ERR_AKID_ISSUER_SERIAL_MISMATCH:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Certificate mismatch!",
             "Some of the information presented by the remote system\n"
             "does not match other information presented\n"
             "This may be an attempt to eavesdrop on communications",
@@ -629,8 +646,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
          break;
       case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Self signed certificate!",
             "Self signed certificate in certificate chain. The certificate "
             "chain could be built up using the untrusted certificates but the "
             "root could not be found locally.",
@@ -644,8 +662,9 @@ static int handle_certificate_problem(SSL * ssl_connection)
          break;
       case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
             "dialog",
+            "Dillo HTTPS: Missing issuer certificate!",
             "Unable to get local issuer certificate. The issuer certificate "
             "of an untrusted certificate cannot be found.",
             "Continue", "Cancel");
@@ -660,8 +679,10 @@ static int handle_certificate_problem(SSL * ssl_connection)
          snprintf(buf, 80,
                   "The remote certificate cannot be verified (code %ld)", st);
          d_cmd = a_Dpip_build_cmd(
-            "cmd=%s msg=%s alt1=%s alt2=%s",
-            "dialog", buf, "Continue", "Cancel");
+            "cmd=%s title=%s msg=%s alt1=%s alt2=%s",
+            "dialog",
+            "Dillo HTTPS: Unverifiable certificate!", buf,
+            "Continue", "Cancel");
          a_Dpip_dsh_write_str(sh, 1, d_cmd);
          dFree(d_cmd);
          response_number = dialog_get_answer_number();

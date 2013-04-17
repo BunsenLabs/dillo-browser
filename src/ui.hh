@@ -11,6 +11,7 @@
 #include <FL/Fl_Image.H>
 #include <FL/Fl_Tabs.H>
 
+#include "tipwin.hh"
 #include "findbar.hh"
 
 typedef enum {
@@ -115,45 +116,18 @@ public:
   }
 };
 
-/*
- * A button that highlights on mouse over
- */
-class CustLightButton : public Fl_Button {
-   Fl_Color norm_color, light_color;
-public:
-   CustLightButton(int x, int y, int w, int h, const char *l=0) :
-      Fl_Button(x,y,w,h,l) { norm_color = color(); light_color = 51; };
-   virtual int handle(int e)
-   {
-      if (active()) {
-         if (e == FL_ENTER) {
-            color(light_color); // {17,26,51}
-            redraw();
-         } else if (e == FL_LEAVE || e == FL_RELEASE || e == FL_HIDE) {
-            color(norm_color);
-            redraw();
-         }
-      } else if (e == FL_DEACTIVATE && color() != norm_color) {
-         color(norm_color);
-         redraw();
-      }
-      return Fl_Button::handle(e);
-   }
-   void hl_color(Fl_Color col) { light_color = col; };
-};
 
 //
 // UI class definition -------------------------------------------------------
 //
 class UI : public CustGroupVertical {
    CustTabs *Tabs;
-   char *TabTooltip;
 
    CustGroupVertical *TopGroup;
-   Fl_Button *Back, *Forw, *Home, *Reload, *Save, *Stop, *Bookmarks, *Tools,
-          *Clear, *Search, *Help, *BugMeter, *FileButton;
+   CustButton *Back, *Forw, *Home, *Reload, *Save, *Stop, *Bookmarks,
+              *Tools, *Clear, *Search, *Help, *BugMeter, *FileButton;
    CustGroupHorizontal *LocBar, *NavBar, *StatusBar;
-   Fl_Input  *Location;
+   Fl_Input *Location;
    CustProgressBox *PProg, *IProg;
    Fl_Group *Panel, *Main;
    Fl_Output *StatusOutput;
@@ -161,13 +135,13 @@ class UI : public CustGroupVertical {
 
    int MainIdx;
    // Panel customization variables
-   int PanelSize, CuteColor, Small_Icons;
+   int PanelSize, Small_Icons;
    int p_xpos, p_ypos, bw, bh, mh, lh, nh, fh, sh, pw, lbl;
    bool PanelTemporary;
 
    UIPanelmode Panelmode;
-   Fl_Button *make_button(const char *label, Fl_Image *img,
-                          Fl_Image*deimg, int b_n, int start = 0);
+   CustButton *make_button(const char *label, Fl_Image *img, Fl_Image*deimg,
+                           int b_n, int start = 0);
    void make_toolbar(int tw, int th);
    void make_location(int ww);
    void make_progress_bars(int wide, int thin_up);
@@ -193,7 +167,7 @@ public:
    void set_img_prog(int n_img, int t_img, int cmd);
    void set_bug_prog(int n_bug);
    void set_render_layout(Fl_Group *nw);
-   void customize(int flags);
+   void customize();
    void button_set_sens(UIButton btn, int sens);
    void paste_url();
    int get_panelsize() { return PanelSize; }

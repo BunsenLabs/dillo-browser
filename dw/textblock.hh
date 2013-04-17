@@ -1,14 +1,27 @@
 #ifndef __DW_TEXTBLOCK_HH__
 #define __DW_TEXTBLOCK_HH__
 
+#include <limits.h>
+
 #include "core.hh"
 #include "../lout/misc.hh"
+
+// These were used when improved line breaking and hyphenation were
+// implemented. Should be cleaned up; perhaps reactivate RTFL again.
+#define PRINTF(fmt, ...)
+#define PUTCHAR(ch)
 
 namespace dw {
 
 /**
  * \brief A Widget for rendering text blocks, i.e. paragraphs or sequences
  *    of paragraphs.
+ *
+ * <div style="border: 2px solid #ffff00; margin-top: 0.5em;
+ * margin-bottom: 0.5em; padding: 0.5em 1em;
+ * background-color: #ffffe0"><b>Info:</b> The recent changes (line
+ * breaking and hyphenation) have not yet been incorporated into this
+ * documentation. See \ref dw-line-breaking.</div>
  *
  * <h3>Signals</h3>
  *
@@ -83,15 +96,20 @@ namespace dw {
  *
  * <h3>Some Internals</h3>
  *
- * There are 3 lists, dw::Textblock::words, dw::Textblock::lines, and
- * dw::Textblock::anchors. The word list is quite static; only new words
- * may be added. A word is either text, a widget, or a break.
+ * There are 4 lists, dw::Textblock::words, dw::Textblock::paragraphs,
+ * dw::Textblock::lines, and dw::Textblock::anchors. The word list is
+ * quite static; only new words may be added. A word is either text, a
+ * widget, or a break.
  *
  * Lines refer to the word list (first and last). They are completely
  * redundant, i.e., they can be rebuilt from the words. Lines can be
  * rewrapped either completely or partially (see "Incremental Resizing"
  * below). For the latter purpose, several values are accumulated in the
  * lines. See dw::Textblock::Line for details.
+ *
+ * A recent change was the introduction of the paragraphs list, which
+ * works quite similar, is also redundant, but is used to calculate
+ * the extremes, not the size.
  *
  * Anchors associate the anchor name with the index of the next word at
  * the point of the anchor.
@@ -130,7 +148,125 @@ namespace dw {
  */
 class Textblock: public core::Widget
 {
+private:
+   /**
+    * This class encapsulates the badness/penalty calculation, and so
+    * (i) makes changes (hopefully) simpler, and (ii) hides the
+    * integer arithmetic (floating point arithmetic avoided for
+    * performance reasons). Unfortunately, the value range of the
+    * badness is not well defined, so fiddling with the penalties is a
+    * bit difficult.
+    */
+   
+   enum {
+      PENALTY_FORCE_BREAK = INT_MIN,
+      PENALTY_PROHIBIT_BREAK = INT_MAX
+   };
+
+   class BadnessAndPenalty
+   {
+   private:
+      enum { NOT_STRETCHABLE, QUITE_LOOSE, BADNESS_VALUE, TOO_TIGHT }
+         badnessState;
+      int ratio; // ratio is only defined when badness is defined
+      int badness, penalty[2];
+      
+      // For debugging: define DEBUG for more informations in print().
+#ifdef DEBUG
+      int totalWidth, idealWidth, totalStretchability, totalShrinkability;
+#endif
+
+      // "Infinity levels" are used to represent very large numbers,
+      // including "quasi-infinite" numbers. A couple of infinity
+      // level and number can be mathematically represented as
+      //
+      //    number * N ^ (infinity level)
+      //
+      // where N is a number which is large enough. Practically,
+      // infinity levels are used to circumvent limited ranges for
+      // integer numbers.
+
+      // Here, all infinity levels have got special meanings.
+      enum {
+         INF_VALUE = 0,        /* simple values */
+         INF_LARGE,            /* large values, like QUITE_LOOSE */
+         INF_NOT_STRETCHABLE,  /* reserved for NOT_STRECTHABLE */
+         INF_TOO_TIGHT,        /* used for lines, which are too tight */
+         INF_PENALTIES,        /* used for penalties */
+         INF_MAX = INF_PENALTIES
+
+         // That INF_PENALTIES is the last value means that an
+         // infinite penalty (breaking is prohibited) makes a break
+         // not possible at all, so that pre-formatted text
+         // etc. works.
+      };
+
+      void setSinglePenalty (int index, int penalty);
+      int badnessValue (int infLevel);
+      int penaltyValue (int index, int infLevel);
+      
+   public:
+      void calcBadness (int totalWidth, int idealWidth,
+                        int totalStretchability, int totalShrinkability);
+      inline void setPenalty (int penalty) { setPenalties (penalty, penalty); }
+      void setPenalties (int penalty1, int penalty2);
+
+      bool lineLoose ();
+      bool lineTight ();
+      bool lineTooTight ();
+      bool lineMustBeBroken (int penaltyIndex);
+      bool lineCanBeBroken (int penaltyIndex);
+      int compareTo (int penaltyIndex, BadnessAndPenalty *other);
+
+      void print ();
+   };
+
+   enum { PENALTY_HYPHEN, PENALTY_EM_DASH_LEFT, PENALTY_EM_DASH_RIGHT,
+          PENALTY_NUM };
+   enum { NUM_DIV_CHARS = 4 };
+
+   typedef struct
+   {
+      const char *s;
+      bool charRemoved, canBeHyphenated, unbreakableForMinWidth;
+      int penaltyIndexLeft, penaltyIndexRight;
+   } DivChar;
+
+   static DivChar divChars[NUM_DIV_CHARS];
+
+   static const char *hyphenDrawChar;
+
 protected:
+   struct Paragraph
+   {
+      int firstWord;    /* first word's index in word vector */
+      int lastWord;     /* last word's index in word vector */
+
+      // TODO Adjust comments. Short note: maxParMin/maxParMax is
+      // is never smaller than parMin/parMax.
+
+      /*
+       * General remark: all values include the last hyphen width, but
+       * not the last space; these values are, however corrected, when
+       * another word is added.
+       *
+       * Also, as opposed to lines, paragraphs are created with the
+       * first, not the last word, so these values change when new
+       * words are added.
+       */
+
+      int parMin;       /* The sum of all word minima (plus spaces,
+                           hyphen width etc.) of the last c  */
+      int parMax;       /* The sum of all word maxima in this
+                         * paragraph (plus spaces, hyphen width
+                         * etc.). */
+
+      int maxParMin;    /* Maximum of all paragraph minima, including
+                         * this line. */
+      int maxParMax;    /* Maximum of all paragraph maxima (value of "parMax"),
+                         * including this one. */
+   };
+
    struct Line
    {
       int firstWord;    /* first word's index in word vector */
@@ -145,30 +281,82 @@ protected:
        * widgets within this line. */
       int marginDescent;
 
-      /* The following members contain accumulated values, from the top
-       * down to the line before. */
-      int maxLineWidth; /* maximum of all line widths */
-      int maxParMin;    /* maximum of all paragraph minima */
-      int maxParMax;    /* maximum of all paragraph maxima */
-      int parMax;       /* the maximal total width down from the last
-                         * paragraph start, to the *beginning* of the
-                         * line */
+      /* Maximum of all line widths, including this line. Does not
+       * include the last space, but the last hyphen width. Please
+       * notice a change: until recently (before hyphenation and
+       * changed line breaking), the values were accumulated up to the
+       * last line, not this line.*/
+      int maxLineWidth;
    };
 
    struct Word
    {
+      enum {
+         /** Can be hyphenated automatically. (Cleared after
+          * hyphenation.) */
+         CAN_BE_HYPHENATED         = 1 << 0,
+         /** Must be drawn with a hyphen, when at the end of the line. */
+         DIV_CHAR_AT_EOL           = 1 << 1,
+         /** Is or ends with a "division character", which is part of
+          * the word. */
+         PERM_DIV_CHAR             = 1 << 2,
+         /** This word must be drawn, together with the following
+          * word(s), by only one call of View::drawText(), to get
+          * kerning, ligatures etc. right. The last of the words drawn
+          * as one text does *not* have this flag set. */
+         DRAW_AS_ONE_TEXT          = 1 << 3,
+         /* When calculating the minimal width (as part of extremes),
+          * do not consider this word as breakable. This flag is
+          * ignored when the line is actually broken.  */
+         UNBREAKABLE_FOR_MIN_WIDTH = 1 << 4,
+         /* If a word represents a "real" text word, or (after
+          * hyphenation) the first part of a "real" text word, this
+          * flag is set. Plays a role for text transformation. */
+         WORD_START                = 1 << 5,
+         /* If a word represents a "real" text word, or (after
+          * hyphenation) the last part of a "real" text word, this
+          * flag is set. Analogue to WORD_START.  */
+         WORD_END                  = 1 << 6
+      };
+
       /* TODO: perhaps add a xLeft? */
       core::Requisition size;
       /* Space after the word, only if it's not a break: */
       short origSpace; /* from font, set by addSpace */
       short effSpace;  /* effective space, set by wordWrap,
                         * used for drawing etc. */
+      short hyphenWidth; /* Additional width, when a word is part
+                          * (except the last part) of a hyphenationed
+                          * word. Has to be added to the width, when
+                          * this is the last word of the line, and
+                          * "hyphenWidth > 0" is also used to decide
+                          * whether to draw a hyphen. */
+      short flags;
       core::Content content;
+
+      // accumulated values, relative to the beginning of the line
+      int totalWidth;          /* The sum of all word widths; plus all
+                                  spaces, excluding the one of this
+                                  word; plus the hyphen width of this
+                                  word (but of course, no hyphen
+                                  widths of previous words. In other
+                                  words: the value compared to the
+                                  ideal width of the line, if the line
+                                  would be broken after this word. */
+      int totalStretchability; // includes all *before* current word
+      int totalShrinkability;  // includes all *before* current word
+      BadnessAndPenalty badnessAndPenalty; /* when line is broken after this
+                                            * word */
 
       core::style::Style *style;
       core::style::Style *spaceStyle; /* initially the same as of the word,
                                          later set by a_Dw_page_add_space */
    };
+
+   void printWordShort (Word *word);
+   void printWordFlags (short flags);
+   void printWordWithFlags (Word *word);
+   void printWord (Word *word);
 
    struct Anchor
    {
@@ -188,7 +376,7 @@ protected:
                          int index);
 
       lout::object::Object *clone();
-      int compareTo(lout::misc::Comparable *other);
+      int compareTo(lout::object::Comparable *other);
 
       bool next ();
       bool prev ();
@@ -228,6 +416,14 @@ protected:
 
    bool mustQueueResize;
 
+   /**
+    * The penalties for hyphens and other, multiplied by 100. So, 100
+    * means 1.0. INT_MAX and INT_MIN are also allowed. See
+    * dw::Textblock::BadnessAndPenalty::setPenalty for more
+    * details. Set from preferences.
+    */
+   static int penalties[PENALTY_NUM][2];
+
    bool limitTextWidth; /* from preferences */
 
    int redrawY;
@@ -236,14 +432,12 @@ protected:
    /* These values are set by set_... */
    int availWidth, availAscent, availDescent;
 
-   int lastLineWidth;
-   int lastLineParMin; /* width of the current non-breakable word sequence
-                        * used by wordWrap () */
-   int lastLineParMax;
-   int wrapRef;  /* [0 based] */
+   int wrapRefLines, wrapRefParagraphs;  /* [0 based] */
 
    lout::misc::SimpleVector <Line> *lines;
-   lout::misc::SimpleVector <Word> *words;
+   lout::misc::SimpleVector <Paragraph> *paragraphs;
+   int nonTemporaryLines;
+   lout::misc::NotSoSimpleVector <Word> *words;
    lout::misc::SimpleVector <Anchor> *anchors;
 
    struct {int index, nChar;}
@@ -254,36 +448,46 @@ protected:
 
    void queueDrawRange (int index1, int index2);
    void getWordExtremes (Word *word, core::Extremes *extremes);
-   inline bool canBreakAfter (Word *word)
-   {
-      return word->content.breakType == core::Content::BREAK_OK;
-   }
-   void markChange (int ref);
-   void justifyLine (Line *line, int availWidth);
-   Line *addLine (int wordInd, bool newPar);
+   void justifyLine (Line *line, int diff);
+   Line *addLine (int firstWord, int lastWord, bool temporary);
    void calcWidgetSize (core::Widget *widget, core::Requisition *size);
    void rewrap ();
-   void decorateText(core::View *view, core::style::Style *style,
-                     core::style::Color::Shading shading,
-                     int x, int yBase, int width);
-   void drawText(core::View *view, core::style::Style *style,
-                 core::style::Color::Shading shading, int x, int y,
-                 const char *text, int start, int len);
-   void drawWord(int wordIndex, core::View *view, core::Rectangle *area,
-                 int xWidget, int yWidgetBase);
-   void drawSpace(int wordIndex, core::View *view, core::Rectangle *area,
-                  int xWidget, int yWidgetBase);
+   void fillParagraphs ();
+   void showMissingLines ();
+   void removeTemporaryLines ();
+
+   void decorateText (core::View *view, core::style::Style *style,
+                      core::style::Color::Shading shading,
+                      int x, int yBase, int width);
+   void drawText (core::View *view, core::style::Style *style,
+                  core::style::Color::Shading shading, int x, int y,
+                  const char *text, int start, int len, bool isStart,
+                  bool isEnd);
+   void drawWord (Line *line, int wordIndex1, int wordIndex2, core::View *view,
+                  core::Rectangle *area, int xWidget, int yWidgetBase);
+   void drawWord0 (int wordIndex1, int wordIndex2,
+                   const char *text, int totalWidth, bool drawHyphen,
+                   core::style::Style *style, core::View *view,
+                   core::Rectangle *area, int xWidget, int yWidgetBase);
+   void drawSpace (int wordIndex, core::View *view, core::Rectangle *area,
+                   int xWidget, int yWidgetBase);
    void drawLine (Line *line, core::View *view, core::Rectangle *area);
    int findLineIndex (int y);
    int findLineOfWord (int wordIndex);
+   int findParagraphOfWord (int wordIndex);
    Word *findWord (int x, int y, bool *inSpace);
 
-   Word *addWord (int width, int ascent, int descent,
+   Word *addWord (int width, int ascent, int descent, short flags,
                   core::style::Style *style);
+   void fillWord (Word *word, int width, int ascent, int descent,
+                  short flags, core::style::Style *style);
+   void fillSpace (Word *word, core::style::Style *style);
+   void setBreakOption (Word *word, core::style::Style *style,
+                        int breakPenalty1, int breakPenalty2);
    int textWidth (const char *text, int start, int len,
-                  core::style::Style *style);
+                  core::style::Style *style, bool isStart, bool isEnd);
    void calcTextSize (const char *text, size_t len, core::style::Style *style,
-                      core::Requisition *size);
+                      core::Requisition *size, bool isStart, bool isEnd);
 
    /**
     * \brief Returns the x offset (the indentation plus any offset needed for
@@ -295,7 +499,7 @@ protected:
    inline int lineXOffsetContents (Line *line)
    {
       return innerPadding + line->leftOffset +
-         (line == lines->getRef (0) ? line1OffsetEff : 0);
+         (line == lines->getFirstRef() ? line1OffsetEff : 0);
    }
 
    /**
@@ -344,11 +548,35 @@ protected:
    {
       return lineYOffsetCanvas (lines->getRef (lineIndex));
    }
+   
+   inline int calcPenaltyIndexForNewLine ()
+   {
+      if (lines->size() == 0)
+         return 0;
+      else
+         return
+            (words->getRef(lines->getLastRef()->lastWord)->flags &
+             (Word::DIV_CHAR_AT_EOL | Word::PERM_DIV_CHAR)) ? 1 : 0;
+   }
 
    bool sendSelectionEvent (core::SelectionState::EventType eventType,
                             core::MousePositionEvent *event);
 
-   virtual void wordWrap(int wordIndex);
+   void accumulateWordExtremes (int firstWord, int lastWord,
+                                int *maxOfMinWidth, int *sumOfMaxWidth);
+   void processWord (int wordIndex);
+   virtual void wordWrap (int wordIndex, bool wrapAll);
+   void handleWordExtremes (int wordIndex);
+   void correctLastWordExtremes ();
+
+   static int getShrinkability(struct Word *word);
+   static int getStretchability(struct Word *word);
+   int hyphenateWord (int wordIndex);
+   void accumulateWordForLine (int lineIndex, int wordIndex);
+   void accumulateWordData (int wordIndex);
+   int calcAvailWidth (int lineIndex);
+   void initLine1Offset (int wordIndex);
+   void alignLine (int lineIndex);
 
    void sizeRequestImpl (core::Requisition *requisition);
    void getExtremesImpl (core::Extremes *extremes);
@@ -370,8 +598,21 @@ protected:
 
    void removeChild (Widget *child);
 
+   void addText0 (const char *text, size_t len, short flags,
+                  core::style::Style *style, core::Requisition *size);
+   void calcTextSizes (const char *text, size_t textLen,
+                       core::style::Style *style,
+                       int numBreaks, int *breakPos,
+                       core::Requisition *wordSize);
+
 public:
    static int CLASS_ID;
+
+   static void setPenaltyHyphen (int penaltyHyphen);
+   static void setPenaltyHyphen2 (int penaltyHyphen2);
+   static void setPenaltyEmDashLeft (int penaltyLeftEmDash);
+   static void setPenaltyEmDashRight (int penaltyRightEmDash);
+   static void setPenaltyEmDashRight2 (int penaltyRightEmDash2);
 
    Textblock(bool limitTextWidth);
    ~Textblock();
@@ -387,15 +628,8 @@ public:
    }
    void addWidget (core::Widget *widget, core::style::Style *style);
    bool addAnchor (const char *name, core::style::Style *style);
-   void addSpace(core::style::Style *style);
-   inline void addBreakOption (core::style::Style *style)
-   {
-      int wordIndex = words->size () - 1;
-      if (wordIndex >= 0 &&
-          style->whiteSpace != core::style::WHITE_SPACE_NOWRAP &&
-          style->whiteSpace != core::style::WHITE_SPACE_PRE)
-         words->getRef(wordIndex)->content.breakType = core::Content::BREAK_OK;
-   }
+   void addSpace (core::style::Style *style);
+   void addBreakOption (core::style::Style *style);
    void addParbreak (int space, core::style::Style *style);
    void addLinebreak (core::style::Style *style);
 

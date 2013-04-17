@@ -7,6 +7,53 @@ user. For a history of changes in full detail, see our Mercurial repository
 at http://hg.dillo.org/dillo
 
 
+dillo-3.0.3 [April 17, 2013]
+
++- Support for CSS display property
+ - Replace polling in DNS with a pipe.
+ - Packed trie to optimize hyphenator memory consumption.
+ - Fix crash in datauri dpi.
+ - Speed up DNS requests when ipv6 isn't enabled.
+   Patches: Johannes Hofmann
++- Fix image input coordinates (BUG#1070)
+ - When location bar is given focus, temporarily show panels if hidden
+   (BUG#1093).
+ - Fix bug where data URI has charset but no media type.
+ - Bug meter line number fix for bare carriage returns.
+ - Add some more info to various bug meter messages.
+ - For text selection, fix releasing mouse button outside of boundary.
+ - While selecting text, moving cursor outside viewport will scroll it.
+ - Make form resetting work for <select>.
+ - Never leave location bar empty when requesting page (BUG#1113).
+ - Some improvements to tab navigation of form widgets (includes BUG#1111).
+ - Don't let form input widget insert literal control chars (BUG#1110).
+ - Assorted improvements to browser usability from the keyboard.
+ - Added user interface color preferences (ui_*).
+ - Removed show_url preference.
+   Patches: corvid
++- Automatic hyphenation (includes penalty_* preferences that control
+   line-breaking).
+   Patch: Sebastian Geerken
++- Added the "view-source" keybinding (default: Ctrl-U).
+   Patch: Alexander Voigt
++- Introduced the domainrc mechanism for finer-grained control than
+   filter_auto_requests had provided.
+   Patch: p37sitdu, corvid
++- After focusing option menu, keypress will seek to next one beginning with
+   that character.
+ - When active tab is closed, focus the last one visited or opened.
+ - Fixed a bug in dpip when dillo aborts a running dpi connection.
+   Patches: Jorge Arellano Cid
++- Better window titles.
+ - Show dialog if saved file would overwrite an existing one.
+   Patches: Jeremy Henty
++- Remove hardcoded UI colors.
+   Patch: Benjamin Johnson, corvid
++- Fix fd leak in dpi write failure case.
+   Patch: p37sitdu, Jorge Arellano Cid
+
+-----------------------------------------------------------------------------
+
 dillo-3.0.2 [December 05, 2011]
 
 +- Digest authentication

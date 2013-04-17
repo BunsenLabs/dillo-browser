@@ -26,13 +26,6 @@
 # (While browsing, this can be changed from the tools/settings menu.)
 #parse_embedded_css=YES
 
-# How should Dillo restrict automatic requests (e.g., redirections,
-# pages containing images or stylesheets)?
-# allow_all
-# same_domain : Permit www.example.org to load an image from img.example.org,
-#               but not from the unrelated ad.doubleclick.net.
-#filter_auto_requests=same_domain
-
 # Change the buffering scheme for drawing
 # 0 no double buffering - useful for debugging
 # 1 light buffering using a single back buffer for all windows
@@ -84,6 +77,47 @@
 
 
 #-------------------------------------------------------------------------
+#                               PENALTIES
+#-------------------------------------------------------------------------
+
+# Penalties are used to control good and bad break points. The bigger
+# the penalty for a given break point, the less likely the line is
+# broken here. "inf" means that breaking is prohibited, "-inf" means
+# that a line *must* be broken here. (The latter should not be used
+# here, however.) Normal spaces get a penalty of 0. The exact
+# definition can be found in doc/dw-line-breaking.doc.
+
+# Penalties for hyphenation breaks; this covers automatic hyphenation,
+# soft hyphens, and unconditional hyphens. Since hyphenation should
+# rather be avoided, the default values are larger than 0.
+
+# This is used for hyphenation points, when there is no hyphen or dash
+# before:
+#penalty_hyphen = 1
+
+# This is used for hyphenation points, when the line before ends
+# already with a hyphen or a dash. Consequent lines ending with
+# hyphens or dashes should be avoided, so this value is bigger than
+# "penalty_hyphen":
+#penalty_hyphen_2 = 8
+
+# The same for a break right of an em-dash, when there are no spaces
+# surrounding it (as in English). The default values are the same as
+# for hyphens:
+#penalty_em_dash_right = 1
+#penalty_em_dash_right_2 = 8
+
+# Penalty for a break *left* of an em-dash. Since a line ending with
+# an em-dash (and so breaking right of the em-dash) looks better than
+# a line beginning with an em-dash (breaking left of an em-dash), the
+# default value is bigger than "penalty_em_dash_right":
+#penalty_em_dash_left = 8
+
+# Notice that there is no "penalty_em_dash_left_2", since breaking
+# left of an em-dash makes the line *begin*, not *end* with a dash.
+
+
+#-------------------------------------------------------------------------
 #                            PARSING SECTION
 #-------------------------------------------------------------------------
 
@@ -113,7 +147,6 @@
 # You can enable multiple search_url strings at once and select from among
 # them at runtime, with the first being the default.
 search_url="http://duckduckgo.com/lite/?kp=-1&q=%s"
-search_url="Scroogle https://ssl.scroogle.org/cgi-bin/nbbwssl.cgi?Gw=%s"
 search_url="Wikipedia http://www.wikipedia.org/w/index.php?search=%s&go=Go"
 search_url="Free Dictionary http://www.thefreedictionary.com/%s"
 search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
@@ -165,7 +198,7 @@ search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
 #
 # See http://zytrax.com/tech/web/browser_ids.htm for a compilation of strings.
 #
-# http_user_agent="Mozilla/5.0 (Windows NT 5.1; rv:7.0.1) Gecko/20100101 Firefox/7.0.1"
+# http_user_agent="Mozilla/5.0 (Windows NT 5.1; rv:18.0) Gecko/20100101 Firefox/18.0"
 # http_user_agent="Wget/1.12 (linux-gnu)"
 #The default is "Dillo/"+current_version_number
 
@@ -173,7 +206,7 @@ search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
 #                            COLORS SECTION
 #-------------------------------------------------------------------------
 
-# Set the background color
+# Set the page background color
 # bg_color=gray
 # bg_color=0xd6d6c0
 #bg_color=0xdcd1ba
@@ -199,6 +232,69 @@ search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
 # theme=gtk+
 # theme=plastic
 
+# UI colors
+# The first four colors map to concepts in the underlying FLTK toolkit. Note
+# that FLTK may sometimes override colors, generally for contrast and
+# readability.
+#
+#ui_fg_color=black
+#ui_main_bg_color=silver
+#ui_text_bg_color=white
+#ui_selection_color=navy
+#
+# Background used when the mouse cursor is over a button.
+#ui_button_highlight_color=(by default, the main background color, lightened)
+#
+# Colors for the current tab.
+#ui_tab_active_bg_color=(by default, the text background color)
+#ui_tab_active_fg_color=(by default, the main foreground color)
+#
+# Colors for the other tabs.
+#ui_tab_bg_color=(by default, the main background color)
+#ui_tab_fg_color=(by default, the main foreground color)
+
+
+# Note to packagers: leaving these variables for the system to guess
+# gives different results in different environments, so we played it safe
+# by defining the traditional colors.  Please choose the color theme that
+# better fits your distro.
+
+#
+# Gray theme (traditional)
+#
+ui_fg_color=black
+ui_main_bg_color=#c6c6c6
+ui_text_bg_color=bfdabf
+ui_selection_color=#191970
+ui_button_highlight_color=#a9a9a9
+ui_tab_active_bg_color=#87aca7
+ui_tab_active_fg_color=black
+ui_tab_bg_color=#b7beb7
+
+#
+# Earthly theme:
+#
+#ui_fg_color=#100404
+#ui_main_bg_color=#c2a47b
+#ui_text_bg_color=#cdc9a5
+#ui_selection_color=#763024
+#ui_tab_active_bg_color=#af4b3f
+#ui_tab_active_fg_color=white
+#ui_tab_bg_color=#d2b48c
+
+#
+# Greenish theme:
+#
+#ui_fg_color=#100404
+#ui_main_bg_color=#c8d394
+#ui_text_bg_color=#bdd8b6
+#ui_selection_color=#7c5f42
+#ui_button_highlight_color=#adad70
+#ui_tab_active_bg_color=#b5b679
+#ui_tab_active_fg_color=#b60907
+#ui_tab_bg_color=#cac682
+
+
 # Size of dillo panel
 # tiny   : buttons, location, and progress boxes in one row
 # small  : location in one row, buttons + progress boxes in another
@@ -220,7 +316,6 @@ search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
 #show_tools=YES
 #show_filemenu=YES
 #show_clear_url=YES
-#show_url=YES
 #show_search=YES
 #show_help=YES
 #show_progress_box=YES

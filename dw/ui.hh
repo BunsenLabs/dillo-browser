@@ -20,8 +20,9 @@ namespace core {
  * \dot
  * digraph G {
  *    node [shape=record, fontname=Helvetica, fontsize=10];
- *    edge [arrowhead="none", arrowtail="empty", labelfontname=Helvetica,
- *          labelfontsize=10, color="#404040", labelfontcolor="#000080"];
+ *    edge [arrowhead="none", arrowtail="empty", dir="both",
+ *          labelfontname=Helvetica, labelfontsize=10, color="#404040",
+ *          labelfontcolor="#000080"];
  *    fontname=Helvetica; fontsize=10;
  *
  *    subgraph cluster_core {
@@ -421,6 +422,7 @@ class SelectionResource: public Resource
 {
 public:
    virtual void addItem (const char *str, bool enabled, bool selected) = 0;
+   virtual void setItem (int index, bool selected) = 0;
    virtual void pushGroup (const char *name, bool enabled) = 0;
    virtual void popGroup () = 0;
 
@@ -480,7 +482,8 @@ public:
 class EntryResource: public TextResource
 {
 public:
-   enum { UNLIMITED_MAX_LENGTH = -1 };
+   enum { UNLIMITED_SIZE = -1 };
+   virtual void setMaxLength (int maxlen) = 0;
 };
 
 class MultiLineTextResource: public TextResource
@@ -540,7 +543,7 @@ public:
    virtual ListResource *createListResource (ListResource::SelectionMode
                                              selectionMode, int rows) = 0;
    virtual OptionMenuResource *createOptionMenuResource () = 0;
-   virtual EntryResource *createEntryResource (int maxLength, bool password,
+   virtual EntryResource *createEntryResource (int size, bool password,
                                                const char *label) = 0;
    virtual MultiLineTextResource *createMultiLineTextResource (int cols,
                                                                int rows) = 0;

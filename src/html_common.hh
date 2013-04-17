@@ -34,12 +34,10 @@
          html->bugMessage(__VA_ARGS__);            \
    } D_STMT_END
 
+
 /*
  * Typedefs
  */
-
-typedef struct _DilloHtmlImage   DilloHtmlImage;
-typedef struct _DilloHtmlState   DilloHtmlState;
 
 typedef enum {
    DT_NONE,
@@ -93,17 +91,17 @@ typedef enum {
  * Data Structures
  */
 
-struct _DilloHtmlImage {
+typedef struct {
    DilloUrl *url;
    DilloImage *image;
-};
+} DilloHtmlImage;
 
-struct _DilloHtmlState {
+typedef struct {
    DilloHtmlParseMode parse_mode;
    DilloHtmlTableMode table_mode;
    DilloHtmlTableBorderMode table_border_mode;
    bool cell_text_align_set;
-
+   bool display_none;
    DilloHtmlListMode list_type;
    int list_number;
 
@@ -119,7 +117,7 @@ struct _DilloHtmlState {
       have to be "handed over" (see Html_add_indented and
       Html_eventually_pop_dw). */
    bool hand_over_break;
-};
+} DilloHtmlState;
 
 /*
  * Classes
@@ -238,14 +236,14 @@ DilloUrl *a_Html_url_new(DilloHtml *html,
                          const char *url_str, const char *base_url,
                          int use_base_url);
 
-DilloImage *a_Html_image_new(DilloHtml *html, const char *tag,
-                             int tagsize, DilloUrl *url);
+void a_Html_image_attrs(DilloHtml *html, const char *tag, int tagsize);
+DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize);
 
 char *a_Html_parse_entities(DilloHtml *html, const char *token, int toksize);
 void a_Html_pop_tag(DilloHtml *html, int TagIdx);
 void a_Html_stash_init(DilloHtml *html);
-int32_t a_Html_color_parse(DilloHtml *html,
-                           const char *subtag, int32_t default_color);
+int32_t a_Html_color_parse(DilloHtml *html, const char *str,
+                           int32_t default_color);
 dw::core::style::Length a_Html_parse_length (DilloHtml *html,
                                              const char *attr);
 void a_Html_tag_set_align_attr(DilloHtml *html, const char *tag, int tagsize);
