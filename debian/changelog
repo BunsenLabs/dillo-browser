@@ -4,14 +4,16 @@ dillo (3.0.3-1) experimental; urgency=low
     + Shows URL already while loading (Closes: #696611)
   * No more hardcode -fPIC, the real source of #664949 seems to have been
     #677705 which has been fixed in the meanwhile.
-  * Bump debhelper compatibility to 9 and use more debhelper stuff
+  * Bump debhelper compatibility to 9 and switch to a dh7 style
+    debian/rules. This includes:
     + Use debian/clean instead of calling rm multiple times in debian/rules
     + Update versioned build-dependency on debhelper
     + Use dh_auto_{configure,build,install}, remove double "make install"
     + Use dh_install instead of calling install directly
     + Use dh_auto_clean and remove intermediate clean-patched make target.
     + Use debian/manpages instead of passing arguments to dh_installman.
-  * Use dh_autoreconf instead of dh_autotools-dev_*config
+    + Use dh_autoreconf instead of dh_autotools-dev_*config
+    + Finally switch the normalized debian/rules to dh7 style.
   * Bump Standards-Version to 3.9.4 (no changes)
 
  -- Axel Beckert <abe@debian.org>  Wed, 17 Apr 2013 16:59:43 +0200
