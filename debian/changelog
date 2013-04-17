@@ -11,6 +11,7 @@ dillo (3.0.3-1) experimental; urgency=low
     + Use dh_install instead of calling install directly
     + Use dh_auto_clean and remove intermediate clean-patched make target.
     + Use debian/manpages instead of passing arguments to dh_installman.
+  * Use dh_autoreconf instead of dh_autotools-dev_*config
   * Bump Standards-Version to 3.9.4 (no changes)
 
  -- Axel Beckert <abe@debian.org>  Wed, 17 Apr 2013 16:59:43 +0200

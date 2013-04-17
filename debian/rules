@@ -3,11 +3,9 @@
 #export DH_VERBOSE=1
 
 configure: config.status
-config.h.in.backup:
-	[ -f config.h.in.backup ] || cp -pv config.h.in config.h.in.backup
-config.status: config.h.in.backup
+config.status:
 	dh_testdir
-	dh_autotools-dev_updateconfig
+	dh_autoreconf
 	dh_auto_configure -- --enable-ipv6 --enable-ssl
 
 build: build-arch build-indep
@@ -22,8 +20,7 @@ clean:
 	dh_testdir
 	dh_testroot
 	dh_auto_clean
-	[ ! -f config.h.in.backup ] || mv -v config.h.in.backup config.h.in
-	dh_autotools-dev_restoreconfig
+	dh_autoreconf_clean
 	dh_clean
 
 install: build
