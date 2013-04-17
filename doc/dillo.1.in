@@ -1,4 +1,4 @@
-.TH dillo 1 "October 13, 2011" "" "USER COMMANDS"
+.TH dillo 1 "November 5, 2012" "" "USER COMMANDS"
 .SH NAME
 dillo \- web browser
 .SH SYNOPSIS
@@ -22,13 +22,21 @@ and some CSS.
 .PP
 Framesets are displayed as links to frames, and there is currently
 no support for javascript or video.
+.PP
+In order to use the hyphenation feature, pattern files from CTAN need to
+be installed to
+.IR /usr/local/lib/dillo/hyphenation/ .
+This can be done with the script
+.IR dillo-install-hyphenation .
+Call it with ISO-639-1 language codes as arguments, or without arguments
+to get more help.
 .SH OPTIONS
 .TP
 \fB\-f\fR, \fB\-\-fullwindow\fR
 Start in full window mode: hide address bar, navigation buttons, menu, and
 status bar.
 .TP
-\fB\-g\fR, \fB\-\-geometry \fIGEO\fR
+\fB\-g\fR, \fB\-geometry \fIGEO\fR
 Set initial window position where \fIGEO\fR is
 \fIW\fBx\fIH\fR[{\fB+\-\fR}\fIX\fR{\fB+\-\fR}\fIY\fR].
 .TP
@@ -36,7 +44,7 @@ Set initial window position where \fIGEO\fR is
 Display this help text and exit.
 .TP
 \fB\-l\fR, \fB\-\-local\fR
-Don't load images for these URL(s).
+Don't load images or stylesheets for these URL(s).
 .TP
 \fB\-v\fR, \fB\-\-version\fR
 Display version info and exit.
@@ -83,6 +91,9 @@ Cookie settings
 .I ~/.dillo/dillorc
 Configuration file.
 .TP
+.I ~/.dillo/domainrc
+Rules for cross-domain requests.
+.TP
 .I ~/.dillo/dpid_comm_keys
 Keys used in dpi daemon communication.
 .TP
@@ -94,7 +105,10 @@ dpi files with protocols.
 Keybindings.
 .TP
 .I ~/.dillo/style.css
-User style sheet
+User style sheet.
+.TP
+.I /usr/local/lib/dillo/hyphenation/
+Hyphenation pattern files.
 .SH SEE ALSO
 .BR wget (1)
 .PP

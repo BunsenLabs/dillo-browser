@@ -13,6 +13,7 @@
 
 #include <math.h> // for rint()
 
+#include <FL/fl_ask.H>
 #include <FL/Fl_Window.H>
 #include <FL/Fl_File_Chooser.H>
 #include <FL/Fl_Return_Button.H>
@@ -35,7 +36,7 @@
  */
 static int input_answer;
 static char *input_str = NULL;
-static int choice5_answer;
+static int choice_answer;
 
 
 /*
@@ -81,9 +82,9 @@ int CustInput3::handle(int e)
 /*
  * Used to make the ENTER key activate the CustChoice
  */
-class CustChoice : public Fl_Choice {
+class CustChoice2 : public Fl_Choice {
 public:
-   CustChoice (int x, int y, int w, int h, const char* l=0) :
+   CustChoice2 (int x, int y, int w, int h, const char* l=0) :
       Fl_Choice(x,y,w,h,l) {};
    int handle(int e) {
       if (e == FL_KEYBOARD &&
@@ -119,8 +120,11 @@ int EnterButton::handle(int e)
 /*
  * Display a message in a popup window.
  */
-void a_Dialog_msg(const char *msg)
+void a_Dialog_msg(const char *title, const char *msg)
 {
+   if (!(title && *title))
+      title = "Dillo: Message";
+   fl_message_title(title);
    fl_message("%s", msg);
 }
 
@@ -140,14 +144,17 @@ static void input_cb(Fl_Widget *button, void *number)
  *
  * Return value: string on success, NULL upon Cancel or Close window
  */
-const char *a_Dialog_input(const char *msg)
+const char *a_Dialog_input(const char *title, const char *msg)
 {
    static Fl_Menu_Item *pm = 0;
    int ww = 450, wh = 130, gap = 10, ih = 60, bw = 80, bh = 30;
 
    input_answer = 0;
 
-   Fl_Window *window = new Fl_Window(ww,wh,"Ask");
+   if (!(title && *title))
+      title = "Dillo: Input";
+
+   Fl_Window *window = new Fl_Window(ww,wh,title);
    window->set_modal();
    window->begin();
     Fl_Group* ib = new Fl_Group(0,0,window->w(),window->h());
@@ -159,8 +166,6 @@ const char *a_Dialog_input(const char *msg)
     o->box(FL_THIN_UP_BOX);
     o->labelfont(FL_TIMES_BOLD);
     o->labelsize(34);
-    o->color(FL_WHITE);
-    o->labelcolor(FL_BLUE);
     o->label("?");
     o->show();
 
@@ -173,7 +178,7 @@ const char *a_Dialog_input(const char *msg)
     c_inp->labelsize(14);
     c_inp->textsize(14);
 
-    CustChoice *ch = new CustChoice(1*gap,ih+3*gap,180,24);
+    CustChoice2 *ch = new CustChoice2(1*gap,ih+3*gap,180,24);
     if (!pm) {
        int n_it = dList_length(prefs.search_urls);
        pm = new Fl_Menu_Item[n_it+1];
@@ -189,7 +194,6 @@ const char *a_Dialog_input(const char *msg)
     ch->tooltip("Select search engine");
     ch->menu(pm);
     ch->value(prefs.search_url_idx);
-    ch->textcolor(FL_DARK_BLUE);
 
     int xpos = ww-2*(gap+bw), ypos = ih+3*gap;
     Fl_Return_Button *rb = new Fl_Return_Button(xpos, ypos, bw, bh, "OK");
@@ -222,8 +226,11 @@ const char *a_Dialog_input(const char *msg)
 /*
  * Dialog for password
  */
-const char *a_Dialog_passwd(const char *msg)
+const char *a_Dialog_passwd(const char *title, const char *msg)
 {
+   if (!(title && *title))
+      title = "Dillo: Password";
+   fl_message_title(title);
    return fl_password("%s", "", msg);
 }
 
@@ -232,10 +239,10 @@ const char *a_Dialog_passwd(const char *msg)
  *
  * Return: pointer to chosen filename, or NULL on Cancel.
  */
-const char *a_Dialog_save_file(const char *msg,
+const char *a_Dialog_save_file(const char *title,
                                const char *pattern, const char *fname)
 {
-   return fl_file_chooser(msg, pattern, fname);
+   return fl_file_chooser(title, pattern, fname);
 }
 
 /*
@@ -243,14 +250,14 @@ const char *a_Dialog_save_file(const char *msg,
  *
  * Return: pointer to chosen filename, or NULL on Cancel.
  */
-const char *a_Dialog_select_file(const char *msg,
+const char *a_Dialog_select_file(const char *title,
                                  const char *pattern, const char *fname)
 {
    /*
     * FileChooser::type(MULTI) appears to allow multiple files to be selected,
     * but just follow save_file's path for now.
     */
-   return a_Dialog_save_file(msg, pattern, fname);
+   return a_Dialog_save_file(title, pattern, fname);
 }
 
 /*
@@ -258,13 +265,13 @@ const char *a_Dialog_select_file(const char *msg,
  *
  * Return: pointer to chosen filename, or NULL on Cancel.
  */
-char *a_Dialog_open_file(const char *msg,
+char *a_Dialog_open_file(const char *title,
                          const char *pattern, const char *fname)
 {
    const char *fc_name;
 
-   fc_name = fl_file_chooser(msg, pattern, fname);
-   return (fc_name) ? a_Misc_escape_chars(fc_name, "% ") : NULL;
+   fc_name = fl_file_chooser(title, pattern, fname);
+   return (fc_name) ? a_Misc_escape_chars(fc_name, "% #") : NULL;
 }
 
 /*
@@ -282,11 +289,14 @@ static void text_window_close_cb(Fl_Widget *, void *vtd)
 /*
  * Show a new window with the provided text
  */
-void a_Dialog_text_window(const char *txt, const char *title)
+void a_Dialog_text_window(const char *title, const char *txt)
 {
    int wh = prefs.height, ww = prefs.width, bh = 30;
 
-   Fl_Window *window = new Fl_Window(ww, wh, title ? title : "Dillo text");
+   if (!(title && *title))
+      title = "Dillo: Text";
+
+   Fl_Window *window = new Fl_Window(ww, wh, title);
    Fl_Group::current(0);
 
 
@@ -297,7 +307,7 @@ void a_Dialog_text_window(const char *txt, const char *title)
     td->textsize((int) rint(14.0 * prefs.font_factor));
 
     /* enable wrapping lines; text uses entire width of window */
-    td->wrap_mode(true, false);
+    td->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
    window->add(td);
 
     Fl_Return_Button *b = new Fl_Return_Button (0, wh-bh, ww, bh, "Close");
@@ -311,49 +321,50 @@ void a_Dialog_text_window(const char *txt, const char *title)
 
 /*--------------------------------------------------------------------------*/
 
-static void choice5_cb(Fl_Widget *button, void *number)
+static void choice_cb(Fl_Widget *button, void *number)
 {
-  choice5_answer = VOIDP2INT(number);
-  _MSG("choice5_cb: %d\n", choice5_answer);
+  choice_answer = VOIDP2INT(number);
+  _MSG("choice_cb: %d\n", choice_answer);
   button->window()->hide();
 }
 
 /*
- * Make a question-dialog with a question and up to five alternatives.
- * (if less alternatives, non used parameters must be NULL).
+ * Make a question-dialog with a question and alternatives.
+ * Last parameter must be NULL.
  *
- * Return value: 0 = dialog was cancelled, 1-5 = selected alternative.
+ * Return value: 0 = dialog was cancelled, >0 = selected alternative.
  */
-int a_Dialog_choice5(const char *QuestionTxt,
-                     const char *alt1, const char *alt2, const char *alt3,
-                     const char *alt4, const char *alt5)
+int a_Dialog_choice(const char *title, const char *msg, ...)
 {
-   choice5_answer = 0;
+   va_list ap;
+   int i, n;
 
-   int ww = 440, wh = 120, bw = 50, bh = 45, ih = 50, nb = 0;
-   const char *txt[7];
+   if (title == NULL || *title == '\0')
+      title = "Dillo: Choice";
 
-   txt[0] = txt[6] = NULL;
-   txt[1] = alt1; txt[2] = alt2; txt[3] = alt3;
-   txt[4] = alt4; txt[5] = alt5;
-   for (int i=1; txt[i]; ++i, ++nb)
-      ;
+   va_start(ap, msg);
+   for (n = 0; va_arg(ap, char *) != NULL; n++);
+   va_end(ap);
 
-   if (!nb) {
-      MSG_ERR("a_Dialog_choice5: No choices.\n");
-      return choice5_answer;
+   if (n == 0) {
+      MSG_ERR("Dialog_choice: no alternatives.\n");
+      return 0;
    }
-   ww = 140 + nb*(bw+10);
 
-   Fl_Window *window = new Fl_Window(ww,wh,"Choice5");
+   int gap = 8;
+   int ww = 140 + n * 60, wh = 120;
+   int bw = (ww - gap) / n - gap, bh = 45;
+   int ih = 50;
+
+   Fl_Window *window = new Fl_Window(ww, wh, title);
    window->set_modal();
    window->begin();
-    Fl_Group* ib = new Fl_Group(0,0,window->w(),window->h());
+    Fl_Group *ib = new Fl_Group(0, 0, window->w(), window->h());
     ib->begin();
     window->resizable(ib);
-
+ 
     /* '?' Icon */
-    Fl_Box* o = new Fl_Box(10, (wh-bh-ih)/2, ih, ih);
+    Fl_Box *o = new Fl_Box(10, (wh - bh - ih) / 2, ih, ih);
     o->box(FL_THIN_UP_BOX);
     o->labelfont(FL_TIMES_BOLD);
     o->labelsize(34);
@@ -361,35 +372,35 @@ int a_Dialog_choice5(const char *QuestionTxt,
     o->labelcolor(FL_BLUE);
     o->label("?");
     o->show();
-
-    Fl_Box *box = new Fl_Box(60,0,ww-60,wh-bh, QuestionTxt);
-    box->labelfont(FL_HELVETICA);
-    box->labelsize(14);
-    box->align(FL_ALIGN_WRAP);
-
-    Fl_Button *b;
-    int xpos = 0, gap = 8;
-    bw = (ww - gap)/nb - gap;
-    xpos += gap;
-    for (int i=1; i <= nb; ++i) {
-       b = new EnterButton(xpos, wh-bh, bw, bh, txt[i]);
-       b->align(FL_ALIGN_WRAP|FL_ALIGN_CLIP);
+ 
+    if (msg != NULL){
+       Fl_Box *box = new Fl_Box(60, 0, ww - 60, wh - bh, msg);
+       box->labelfont(FL_HELVETICA);
+       box->labelsize(14);
+       box->align(FL_ALIGN_WRAP);
+    }
+ 
+    int xpos = gap;
+    va_start(ap, msg);
+    for (i = 1; i <= n; i++) {
+       Fl_Button *b = new EnterButton(xpos, wh-bh, bw, bh, va_arg(ap, char *));
+       b->align(FL_ALIGN_WRAP | FL_ALIGN_CLIP);
        b->box(FL_UP_BOX);
-       b->callback(choice5_cb, INT2VOIDP(i));
+       b->callback(choice_cb, INT2VOIDP(i));
        xpos += bw + gap;
        /* TODO: set focus to the *-prefixed alternative */
     }
+    va_end(ap);
    window->end();
 
    window->show();
    while (window->shown())
       Fl::wait();
-   _MSG("a_Dialog_choice5 answer = %d\n", choice5_answer);
+   _MSG("Dialog_choice answer = %d\n", answer);
    delete window;
 
-   return choice5_answer;
+   return choice_answer;
 }
-
 
 /*--------------------------------------------------------------------------*/
 static void Dialog_user_password_cb(Fl_Widget *button, void *)
@@ -403,31 +414,34 @@ static void Dialog_user_password_cb(Fl_Widget *button, void *)
  * Call the callback with the result (OK or not) and the given user and
  *   password if OK.
  */
-int a_Dialog_user_password(const char *message, UserPasswordCB cb, void *vp)
+int a_Dialog_user_password(const char *title, const char *msg,
+                           UserPasswordCB cb, void *vp)
 {
    int ok = 0, window_h = 280, y, msg_w, msg_h;
    const int window_w = 300, input_x = 80, input_w = 200, input_h = 30,
       button_h = 30;
 
    /* window is resized below */
-   Fl_Window *window = new Fl_Window(window_w,window_h,"Dillo User/Password");
+   if (!(title && *title))
+      title = "Dillo: User/Password";
+   Fl_Window *window = new Fl_Window(window_w,window_h,title);
    Fl_Group::current(0);
    window->user_data(NULL);
 
    /* message */
    y = 20;
    msg_w = window_w - 40;
-   Fl_Box *msg = new Fl_Box(20, y, msg_w, 100); /* resized below */
-   msg->label(message);
-   msg->labelfont(FL_HELVETICA);
-   msg->labelsize(14);
-   msg->align(FL_ALIGN_INSIDE | FL_ALIGN_TOP_LEFT | FL_ALIGN_WRAP);
+   Fl_Box *msg_box = new Fl_Box(20, y, msg_w, 100); /* resized below */
+   msg_box->label(msg);
+   msg_box->labelfont(FL_HELVETICA);
+   msg_box->labelsize(14);
+   msg_box->align(FL_ALIGN_INSIDE | FL_ALIGN_TOP_LEFT | FL_ALIGN_WRAP);
 
-   fl_font(msg->labelfont(), msg->labelsize());
+   fl_font(msg_box->labelfont(), msg_box->labelsize());
    msg_w -= 6; /* The label doesn't fill the entire box. */
-   fl_measure(msg->label(), msg_w, msg_h, 0); /* fl_measure wraps at msg_w */
-   msg->size(msg->w(), msg_h);
-   window->add(msg);
+   fl_measure(msg_box->label(), msg_w, msg_h, 0); // fl_measure wraps at msg_w
+   msg_box->size(msg_box->w(), msg_h);
+   window->add(msg_box);
 
    /* inputs */
    y += msg_h + 20;

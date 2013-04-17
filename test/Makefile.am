@@ -19,9 +19,13 @@ noinst_PROGRAMS = \
 	dw-imgbuf-mem-test \
 	dw-resource-test \
 	dw-ui-test \
-	fltk-browser \
+	containers \
 	shapes \
-	cookies
+	cookies \
+	liang \
+	trie \
+	notsosimplevector \
+	unicode-test
 
 dw_anchors_test_SOURCES = dw_anchors_test.cc
 dw_anchors_test_LDADD = \
@@ -147,15 +151,43 @@ dw_ui_test_LDADD = \
 	$(top_builddir)/lout/liblout.a \
 	@LIBFLTK_LIBS@
 
-fltk_browser_SOURCES = fltk_browser.cc
-fltk_browser_LDADD = @LIBFLTK_LIBS@
-
 shapes_SOURCES = shapes.cc
 shapes_LDADD = \
 	$(top_builddir)/dw/libDw-core.a \
 	$(top_builddir)/lout/liblout.a
 
+containers_SOURCES = containers.cc
+containers_LDADD = $(top_builddir)/lout/liblout.a
+
 cookies_SOURCES = cookies.c
 cookies_LDADD = \
 	$(top_builddir)/dpip/libDpip.a \
 	$(top_builddir)/dlib/libDlib.a
+
+liang_SOURCES = liang.cc
+
+liang_LDADD = \
+	$(top_builddir)/dw/libDw-widgets.a \
+	$(top_builddir)/dw/libDw-fltk.a \
+	$(top_builddir)/dw/libDw-core.a \
+	$(top_builddir)/lout/liblout.a \
+	@LIBFLTK_LIBS@
+
+trie_SOURCES = trie.cc
+
+trie_LDADD = \
+	$(top_builddir)/dw/libDw-widgets.a \
+	$(top_builddir)/dw/libDw-fltk.a \
+	$(top_builddir)/dw/libDw-core.a \
+	$(top_builddir)/lout/liblout.a \
+	@LIBFLTK_LIBS@
+
+notsosimplevector_SOURCES = notsosimplevector.cc
+
+notsosimplevector_LDADD = $(top_builddir)/lout/liblout.a
+
+unicode_test_SOURCES = unicode_test.cc
+
+unicode_test_LDADD = \
+	$(top_builddir)/lout/liblout.a \
+	@LIBFLTK_LIBS@

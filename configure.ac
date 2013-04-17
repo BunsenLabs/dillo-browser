@@ -1,6 +1,6 @@
 dnl Process this file with aclocal, autoconf and automake.
 
-AC_INIT([dillo], [3.0.2])
+AC_INIT([dillo], [3.0.3])
 
 dnl Detect the canonical target build environment
 AC_CANONICAL_TARGET
@@ -119,9 +119,9 @@ case $fltk_version in
          LIBFLTK_CFLAGS=`fltk-config --cflags`
          LIBFLTK_LIBS=`fltk-config --ldflags`;;
   ?*)    AC_MSG_RESULT(no)
-         AC_ERROR(FLTK 1.3 required; version found: $fltk_version);;
+         AC_MSG_ERROR(FLTK 1.3 required; version found: $fltk_version);;
   *)     AC_MSG_RESULT(no)
-         AC_ERROR(FLTK 1.3 required; fltk-config not found)
+         AC_MSG_ERROR(FLTK 1.3 required; fltk-config not found)
 esac
 
 
@@ -208,10 +208,8 @@ dnl For debugging and to be user friendly
     AC_MSG_CHECKING([for libpng version])
     png_version=`$PNG_CONFIG --version`
     case $png_version in
-      1.4.*) AC_MSG_RESULT([$png_version (newer version)]) ;;
-      1.2.*) AC_MSG_RESULT([$png_version (newer version)]) ;;
-      1.0.*) AC_MSG_RESULT([$png_version (older version)]) ;;
-          *) AC_MSG_RESULT([ERROR]) ;;
+      1.[[024]].*) AC_MSG_RESULT([$png_version]) ;;
+                *) AC_MSG_RESULT([$png_version (unrecognised version)]) ;;
     esac
 
 dnl Try to use options that are supported by all libpng-config versions...

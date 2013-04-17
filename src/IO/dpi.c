@@ -86,19 +86,6 @@ void a_Dpi_init(void)
 }
 
 /*
- * Close a FD handling EINTR
- */
-static void Dpi_close_fd(int fd)
-{
-   int st;
-
-   dReturn_if (fd < 0);
-   do
-      st = close(fd);
-   while (st < 0 && errno == EINTR);
-}
-
-/*
  * Create a new connection data structure
  */
 static dpi_conn_t *Dpi_conn_new(ChainLink *Info)
@@ -362,7 +349,7 @@ static int Dpi_start_dpid(void)
    if (pid == 0) {
       /* This is the child process.  Execute the command. */
       char *path1 = dStrconcat(dGethomedir(), "/.dillo/dpid", NULL);
-      Dpi_close_fd(st_pipe[0]);
+      dClose(st_pipe[0]);
       if (execl(path1, "dpid", (char*)NULL) == -1) {
          dFree(path1);
          path1 = dStrconcat(DILLO_BINDIR, "dpid", NULL);
@@ -373,7 +360,7 @@ static int Dpi_start_dpid(void)
                if (Dpi_blocking_write(st_pipe[1], "ERROR", 5) == -1) {
                   MSG("Dpi_start_dpid (child): can't write to pipe.\n");
                }
-               Dpi_close_fd(st_pipe[1]);
+               dClose(st_pipe[1]);
                _exit (EXIT_FAILURE);
             }
          }
@@ -382,19 +369,18 @@ static int Dpi_start_dpid(void)
       /* The fork failed.  Report failure.  */
       MSG("Dpi_start_dpid: %s\n", dStrerror(errno));
       /* close the unused pipe */
-      Dpi_close_fd(st_pipe[0]);
-      Dpi_close_fd(st_pipe[1]);
-
+      dClose(st_pipe[0]);
+      dClose(st_pipe[1]);
    } else {
       /* This is the parent process, check our child status... */
-      Dpi_close_fd(st_pipe[1]);
+      dClose(st_pipe[1]);
       if ((answer = Dpi_blocking_read(st_pipe[0])) != NULL) {
          MSG("Dpi_start_dpid: can't start dpid\n");
          dFree(answer);
       } else {
          ret = 0;
       }
-      Dpi_close_fd(st_pipe[0]);
+      dClose(st_pipe[0]);
    }
 
    return ret;
@@ -467,7 +453,7 @@ static int Dpi_check_dpid_ids()
       } else if (connect(sock_fd, (struct sockaddr *)&sin, sin_sz) == -1) {
          MSG("Dpi_check_dpid_ids: %s\n", dStrerror(errno));
       } else {
-         Dpi_close_fd(sock_fd);
+         dClose(sock_fd);
          ret = 1;
       }
    }
@@ -603,7 +589,7 @@ static int Dpi_get_server_port(const char *server_name)
       dFree(cmd);
    }
    dFree(rply);
-   Dpi_close_fd(sock_fd);
+   dClose(sock_fd);
 
    return ok ? dpi_port : -1;
 }
@@ -614,10 +600,10 @@ static int Dpi_get_server_port(const char *server_name)
  * We have to ask 'dpid' (dpi daemon) for the port of the target dpi server.
  * Once we have it, then the proper file descriptor is returned (-1 on error).
  */
-static int Dpi_connect_socket(const char *server_name, int retry)
+static int Dpi_connect_socket(const char *server_name)
 {
    struct sockaddr_in sin;
-   int sock_fd, err, dpi_port, ret=-1;
+   int sock_fd, dpi_port, ret = -1;
    char *cmd = NULL;
 
    /* Query dpid for the port number for this server */
@@ -636,18 +622,9 @@ static int Dpi_connect_socket(const char *server_name, int retry)
    if ((sock_fd = Dpi_make_socket_fd()) == -1) {
       perror("[dpi::socket]");
    } else if (connect(sock_fd, (void*)&sin, sizeof(sin)) == -1) {
-      err = errno;
-      sock_fd = -1;
       MSG("[dpi::connect] errno:%d %s\n", errno, dStrerror(errno));
-      if (retry) {
-         switch (err) {
-            case ECONNREFUSED: case EBADF: case ENOTSOCK: case EADDRNOTAVAIL:
-               sock_fd = Dpi_connect_socket(server_name, FALSE);
-               break;
-         }
-      }
 
-   /* send authentication Key (the server closes sock_fd on error) */
+   /* send authentication Key (the server closes sock_fd on auth error) */
    } else if (!(cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "auth", SharedKey))) {
       MSG_ERR("[Dpi_connect_socket] Can't make auth message.\n");
    } else if (Dpi_blocking_write(sock_fd, cmd, strlen(cmd)) == -1) {
@@ -656,6 +633,8 @@ static int Dpi_connect_socket(const char *server_name, int retry)
       ret = sock_fd;
    }
    dFree(cmd);
+   if (sock_fd != -1 && ret == -1) /* can't send cmd? */
+      dClose(sock_fd);
 
    return ret;
 }
@@ -677,20 +656,19 @@ void a_Dpi_ccc(int Op, int Branch, int Dir, ChainLink *Info,
          switch (Op) {
          case OpStart:
             if ((st = Dpi_blocking_start_dpid()) == 0) {
-               SockFD = Dpi_connect_socket(Data1, TRUE);
-               if (SockFD != -1) {
+               if ((SockFD = Dpi_connect_socket(Data1)) != -1) {
                   int *fd = dNew(int, 1);
                   *fd = SockFD;
                   Info->LocalKey = fd;
                   a_Chain_link_new(Info, a_Dpi_ccc, BCK, a_IO_ccc, 1, 1);
                   a_Chain_bcb(OpStart, Info, NULL, NULL);
+                  /* Let the FD known and tracked */
+                  a_Chain_bcb(OpSend, Info, &SockFD, "FD");
+                  a_Chain_fcb(OpSend, Info, &SockFD, "FD");
+                  a_Chain_fcb(OpSend, Info, NULL, "DpidOK");
+               } else {
+                  a_Dpi_ccc(OpAbort, 1, FWD, Info, NULL, NULL);
                }
-            }
-
-            if (st == 0 && SockFD != -1) {
-               a_Chain_bcb(OpSend, Info, &SockFD, "FD");
-               a_Chain_fcb(OpSend, Info, &SockFD, "FD");
-               a_Chain_fcb(OpSend, Info, NULL, "DpidOK");
             } else {
                MSG_ERR("dpi.c: can't start dpi daemon\n");
                a_Dpi_ccc(OpAbort, 1, FWD, Info, NULL, "DpidERROR");
@@ -798,14 +776,14 @@ char *a_Dpi_send_blocking_cmd(const char *server_name, const char *cmd)
       return ret;
    }
 
-   if ((sock_fd = Dpi_connect_socket(server_name, TRUE)) == -1) {
+   if ((sock_fd = Dpi_connect_socket(server_name)) == -1) {
       MSG_ERR("[a_Dpi_send_blocking_cmd] Can't connect to server.\n");
    } else if (Dpi_blocking_write(sock_fd, cmd, strlen(cmd)) == -1) {
       MSG_ERR("[a_Dpi_send_blocking_cmd] Can't send message.\n");
    } if ((ret = Dpi_blocking_read(sock_fd)) == NULL) {
       MSG_ERR("[a_Dpi_send_blocking_cmd] Can't read message.\n");
    }
-   Dpi_close_fd(sock_fd);
+   dClose(sock_fd);
 
    return ret;
 }

@@ -15,6 +15,7 @@
 
 #include <sys/types.h>
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -29,11 +30,9 @@
 #include "capi.h"
 #include "decode.h"
 #include "auth.h"
-
+#include "domain.h"
 #include "timeout.hh"
 #include "uicmd.hh"
-
-#define NULLKey 0
 
 /* Maximum initial size for the automatically-growing data buffer */
 #define MAX_INIT_BUF  1024*1024
@@ -142,7 +141,9 @@ static int Cache_client_enqueue(const DilloUrl *Url, DilloWeb *Web,
    static int ClientKey = 0; /* Provide a primary key for each client */
    CacheClient_t *NewClient;
 
-   if (++ClientKey <= 0)
+   if (ClientKey < INT_MAX) /* check for integer overflow */
+      ClientKey++;
+   else
       ClientKey = 1;
 
    NewClient = dNew(CacheClient_t, 1);
@@ -171,12 +172,8 @@ static int Cache_client_by_key_cmp(const void *client, const void *key)
 /*
  * Remove a client from the queue
  */
-static void Cache_client_dequeue(CacheClient_t *Client, int Key)
+static void Cache_client_dequeue(CacheClient_t *Client)
 {
-   if (!Client) {
-      Client = dList_find_custom(ClientQueue, INT2VOIDP(Key),
-                                 Cache_client_by_key_cmp);
-   }
    if (Client) {
       dList_remove(ClientQueue, Client);
       a_Web_free(Client->Web);
@@ -236,7 +233,7 @@ static CacheEntry_t *Cache_entry_search_with_redirect(const DilloUrl *Url)
          break;
       }
       /* Test for a working redirection */
-      if (entry && entry->Flags & CA_Redirect && entry->Location) {
+      if (entry->Flags & CA_Redirect && entry->Location) {
          Url = entry->Location;
       } else
          break;
@@ -679,8 +676,7 @@ static void Cache_parse_header(CacheEntry_t *entry)
          /* 30x: URL redirection */
          DilloUrl *location_url = a_Url_new(location_str,URL_STR_(entry->Url));
 
-         if (prefs.filter_auto_requests == PREFS_FILTER_SAME_DOMAIN &&
-             !a_Url_same_organization(entry->Url, location_url)) {
+         if (!a_Domain_permit(entry->Url, location_url)) {
             /* don't redirect; just show body like usual (if any) */
             MSG("Redirection not followed from %s to %s\n",
                 URL_HOST(entry->Url), URL_STR(location_url));
@@ -909,9 +905,9 @@ void a_Cache_process_dbuf(int Op, const char *buf, size_t buf_size,
       }
       if ((entry->Flags & CA_GotLength) &&
           (entry->ExpectedSize != entry->TransferSize)) {
-         MSG_HTTP("Content-Length does NOT match message body,\n"
-                  " at: %s\n", URL_STR_(entry->Url));
-         MSG("entry->ExpectedSize = %d, entry->TransferSize = %d\n",
+         MSG_HTTP("Content-Length does NOT match message body at\n"
+                  "%s\n", URL_STR_(entry->Url));
+         MSG("Expected size: %d, Transfer size: %d\n",
              entry->ExpectedSize, entry->TransferSize);
       }
       if (!entry->TransferSize && !(entry->Flags & CA_Redirect) &&
@@ -1200,7 +1196,7 @@ static CacheEntry_t *Cache_process_queue(CacheEntry_t *entry)
                if (ClientWeb->flags & WEB_RootUrl)
                   a_Nav_cancel_expect_if_eq(Client_bw, Client->Url);
                a_Bw_remove_client(Client_bw, Client->Key);
-               Cache_client_dequeue(Client, NULLKey);
+               Cache_client_dequeue(Client);
                --i; /* Keep the index value in the next iteration */
                continue;
             }
@@ -1230,7 +1226,7 @@ static CacheEntry_t *Cache_process_queue(CacheEntry_t *entry)
             (Client->Callback)(CA_Close, Client);
             if (ClientWeb->flags & WEB_RootUrl)
                a_UIcmd_set_page_prog(Client_bw, 0, 0);
-            Cache_client_dequeue(Client, NULLKey);
+            Cache_client_dequeue(Client);
             --i; /* Keep the index value in the next iteration */
 
             /* within CA_GotData, we assert just one redirect call */
@@ -1348,7 +1344,7 @@ void a_Cache_stop_client(int Key)
          dList_remove(DelayedQueue, entry);
 
       /* Main queue */
-      Cache_client_dequeue(Client, NULLKey);
+      Cache_client_dequeue(Client);
 
    } else {
       _MSG("WARNING: Cache_stop_client, nonexistent client\n");
@@ -1366,7 +1362,7 @@ void a_Cache_freeall(void)
 
    /* free the client queue */
    while ((Client = dList_nth_data(ClientQueue, 0)))
-      Cache_client_dequeue(Client, NULLKey);
+      Cache_client_dequeue(Client);
 
    /* Remove every cache entry */
    while ((data = dList_nth_data(CachedURLs, 0))) {

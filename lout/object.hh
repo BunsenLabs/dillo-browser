@@ -6,12 +6,12 @@
 
 #include "misc.hh"
 
+namespace lout {
+
 /**
  * \brief Here, some common classes (or interfaces) are defined, to standardize
  *    the access to other classes.
  */
-namespace lout {
-
 namespace object {
 
 /**
@@ -31,6 +31,32 @@ public:
    virtual void intoStringBuffer(misc::StringBuffer *sb);
    const char *toString();
    virtual size_t sizeOf();
+};
+
+/**
+ * \brief Instances of a sub class of may be compared (less, greater).
+ *
+ * Used for sorting etc.
+ */
+class Comparable: public Object
+{
+public:
+   /**
+    * \brief Compare two objects c1 and c2.
+    *
+    * Return a value < 0, when c1 is less than c2, a value > 0, when c1
+    * is greater than c2, or 0, when c1 and c2 are equal.
+    *
+    * If c1.equals(c2) (as defined in Object), c1.compareTo(c2) must
+    * be 0, but, unlike you may expect, the reversed is not
+    * necessarily true. This method returns 0, if, according to the
+    * rules for sorting, there is no difference, but there may still
+    * be differences (not relevant for sorting), which "equals" will
+    * care about.
+    */
+   virtual int compareTo(Comparable *other) = 0;
+
+   static int compareFun(const void *p1, const void *p2);
 };
 
 /**
@@ -63,7 +89,7 @@ public:
 /**
  * \brief An object::Object wrapper for int's.
  */
-class Integer: public Object, misc::Comparable
+class Integer: public Comparable
 {
    int value;
 
@@ -82,7 +108,7 @@ public:
  *
  * As opposed to object::String, the char array is not copied.
  */
-class ConstString: public Object, misc::Comparable
+class ConstString: public Comparable
 {
 protected:
    const char *str;

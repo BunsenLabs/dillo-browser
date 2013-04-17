@@ -44,6 +44,7 @@
    } D_STMT_END
 
 #define MSG(...) MSG_INNARDS("", __VA_ARGS__)
+#define MSG_WARN(...) MSG_INNARDS("** WARNING **: ", __VA_ARGS__)
 #define MSG_ERR(...) MSG_INNARDS("** ERROR **: ", __VA_ARGS__)
 
 
@@ -368,10 +369,10 @@ static int Dpi_get_server_port(const char *server_name)
 }
 
 
-static int Dpi_connect_socket(const char *server_name, int retry)
+static int Dpi_connect_socket(const char *server_name)
 {
    struct sockaddr_in sin;
-   int sock_fd, err, dpi_port, ret=-1;
+   int sock_fd, dpi_port, ret = -1;
    char *cmd = NULL;
 
    /* Query dpid for the port number for this server */
@@ -390,18 +391,9 @@ static int Dpi_connect_socket(const char *server_name, int retry)
    if ((sock_fd = Dpi_make_socket_fd()) == -1) {
       perror("[dpi::socket]");
    } else if (connect(sock_fd, (void*)&sin, sizeof(sin)) == -1) {
-      err = errno;
-      sock_fd = -1;
       MSG("[dpi::connect] errno:%d %s\n", errno, dStrerror(errno));
-      if (retry) {
-         switch (err) {
-            case ECONNREFUSED: case EBADF: case ENOTSOCK: case EADDRNOTAVAIL:
-               sock_fd = Dpi_connect_socket(server_name, FALSE);
-               break;
-         }
-      }
 
-   /* send authentication Key (the server closes sock_fd on error) */
+   /* send authentication Key (the server closes sock_fd on auth error) */
    } else if (!(cmd = a_Dpip_build_cmd("cmd=%s msg=%s", "auth", SharedKey))) {
       MSG_ERR("[Dpi_connect_socket] Can't make auth message.\n");
    } else if (Dpi_blocking_write(sock_fd, cmd, strlen(cmd)) == -1) {
@@ -410,6 +402,8 @@ static int Dpi_connect_socket(const char *server_name, int retry)
       ret = sock_fd;
    }
    dFree(cmd);
+   if (sock_fd != -1 && ret == -1) /* can't send cmd? */
+      Dpi_close_fd(sock_fd);
 
    return ret;
 }
@@ -425,7 +419,7 @@ char *a_Dpi_send_blocking_cmd(const char *server_name, const char *cmd)
       return ret;
    }
 
-   if ((sock_fd = Dpi_connect_socket(server_name, TRUE)) == -1) {
+   if ((sock_fd = Dpi_connect_socket(server_name)) == -1) {
       MSG_ERR("[a_Dpi_send_blocking_cmd] Can't connect to server.\n");
    } else if (Dpi_blocking_write(sock_fd, cmd, strlen(cmd)) == -1) {
       MSG_ERR("[a_Dpi_send_blocking_cmd] Can't send message.\n");
@@ -785,8 +779,87 @@ static void path()
    expect(__LINE__, "Cookie: name=val\r\n", "http", "p6.com", "/dir/subdir/s");
 }
 
+int Cookies_rc_check()
+{
+   const int line_maxlen = 4096;
+   FILE *stream;
+   char *filename;
+   char line[line_maxlen];
+   bool_t default_deny = TRUE;
+
+   /* Get a file pointer */
+   filename = dStrconcat(dGethomedir(), "/.dillo/cookiesrc", NULL);
+   stream = fopen(filename, "r");
+   dFree(filename);
+
+   if (!stream) {
+      MSG_ERR("Cannot run test; cannot open cookiesrc.\n");
+      return 1;
+   }
+
+   /* Get all lines in the file */
+   while (!feof(stream)) {
+      char *rc;
+
+      line[0] = '\0';
+      rc = fgets(line, line_maxlen, stream);
+      if (!rc && ferror(stream)) {
+         MSG_ERR("Error while reading rule from cookiesrc: %s\n",
+             dStrerror(errno));
+         fclose(stream);
+         return 2;
+      }
+
+      /* Remove leading and trailing whitespaces */
+      dStrstrip(line);
+
+      if (line[0] != '\0' && line[0] != '#') {
+         int domain_end, i = 0;
+         const char *rule;
+
+         /* Get the domain */
+         while (line[i] != '\0' && !dIsspace(line[i]))
+            i++;
+         domain_end = i;
+
+         /* Skip past whitespace */
+         while (dIsspace(line[i]))
+            i++;
+         line[domain_end] = '\0';
+
+         /* Get the rule */
+         rule = line + i;
+         while (line[i] != '\0' && !dIsspace(line[i]))
+            i++;
+         line[i] = '\0';
+
+         if (!dStrAsciiCasecmp(line, "DEFAULT")) {
+            if (!dStrAsciiCasecmp(rule, "ACCEPT") ||
+                !dStrAsciiCasecmp(rule, "ACCEPT_SESSION"))
+               default_deny = FALSE;
+         } else {
+            if (!dStrAsciiCasecmp(rule, "DENY"))
+               MSG_WARN("DENY rules in cookiesrc can interfere with test.\n");
+         }
+      }
+   }
+   fclose(stream);
+
+   if (default_deny) {
+      MSG_ERR("Cannot run test with cookiesrc default of deny.\n");
+      return 1;
+   } else {
+      return 0;
+   }
+}
+
 int main()
 {
+   if (Cookies_rc_check()) {
+      MSG("If you change cookiesrc, remember to stop the DPIs via dpidc.\n");
+      return 1;
+   }
+
    a_Cookies_set("name=val", "ordinary.com", "/", NULL);
    expect(__LINE__, "Cookie: name=val\r\n", "http", "ordinary.com", "/");
 
@@ -966,5 +1039,9 @@ MSG("org should fail: %s\n",
 #endif
 
    MSG("TESTS: passed: %u failed: %u\n", passed, failed);
+
+   MSG("Now that everything is full of fake cookies, you should run "
+       "'dpidc stop', plus delete cookies.txt if necessary.\n");
+
    return 0;
 }

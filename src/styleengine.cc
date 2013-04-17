@@ -12,6 +12,7 @@
 #include "../dlib/dlib.h"
 #include "msg.h"
 #include "prefs.h"
+#include "misc.h"
 #include "html_common.hh"
 #include "styleengine.hh"
 
@@ -25,11 +26,13 @@ StyleEngine::StyleEngine (dw::core::Layout *layout) {
    doctree = new Doctree ();
    stack = new lout::misc::SimpleVector <Node> (1);
    cssContext = new CssContext ();
+   buildUserAgentStyle ();
+   buildUserStyle ();
    this->layout = layout;
    importDepth = 0;
 
-   stack->increase ();
-   Node *n = stack->getRef (stack->size () - 1);
+   stackPush ();
+   Node *n = stack->getLastRef ();
 
    /* Create a dummy font, attribute, and tag for the bottom of the stack. */
    font_attrs.name = prefs.font_sans_serif;
@@ -46,51 +49,56 @@ StyleEngine::StyleEngine (dw::core::Layout *layout) {
    style_attrs.initValues ();
    style_attrs.font = Font::create (layout, &font_attrs);
    style_attrs.color = Color::create (layout, 0);
-   style_attrs.backgroundColor = Color::create (layout, 0xffffff);
+   style_attrs.backgroundColor = Color::create (layout, prefs.bg_color);
 
-   n->style = Style::create (layout, &style_attrs);
-   n->wordStyle = NULL;
-   n->backgroundStyle = NULL;
-   n->styleAttrProperties = NULL;
-   n->styleAttrPropertiesImportant = NULL;
-   n->nonCssProperties = NULL;
-   n->inheritBackgroundColor = false;
+   n->style = Style::create (&style_attrs);
 }
 
 StyleEngine::~StyleEngine () {
    while (doctree->top ())
       endElement (doctree->top ()->element);
-   assert (stack->size () == 1); // dummy node on the bottom of the stack
+
+   stackPop (); // dummy node on the bottom of the stack
+   assert (stack->size () == 0);
+
+   delete stack;
+   delete doctree;
+   delete cssContext;
+}
+
+void StyleEngine::stackPush () {
+   static const Node emptyNode = {
+      NULL, NULL, NULL, NULL, NULL, NULL, false, NULL
+   };
+
+   stack->setSize (stack->size () + 1, emptyNode);
+}
+
+void StyleEngine::stackPop () {
    Node *n = stack->getRef (stack->size () - 1);
+
+   delete n->styleAttrProperties;
+   delete n->styleAttrPropertiesImportant;
+   delete n->nonCssProperties;
    if (n->style)
       n->style->unref ();
    if (n->wordStyle)
       n->wordStyle->unref ();
    if (n->backgroundStyle)
       n->backgroundStyle->unref ();
-   delete stack;
-   delete doctree;
-   delete cssContext;
+   stack->setSize (stack->size () - 1);
 }
 
 /**
  * \brief tell the styleEngine that a new html element has started.
  */
 void StyleEngine::startElement (int element) {
-   if (stack->getRef (stack->size () - 1)->style == NULL)
-      style0 (stack->size () - 1);
+   style (); // ensure that style of current node is computed
 
-   stack->increase ();
-   Node *n = stack->getRef (stack->size () - 1);
-   n->styleAttrProperties = NULL;
-   n->styleAttrPropertiesImportant = NULL;
-   n->nonCssProperties = NULL;
-   n->style = NULL;
-   n->wordStyle = NULL;
-   n->backgroundStyle = NULL;
-   n->inheritBackgroundColor = false;
-
+   stackPush ();
+   Node *n = stack->getLastRef ();
    DoctreeNode *dn = doctree->push ();
+
    dn->element = element;
    n->doctreeNode = dn;
 }
@@ -103,7 +111,7 @@ void StyleEngine::setId (const char *id) {
    DoctreeNode *dn =  doctree->top ();
    assert (dn->id == NULL);
    dn->id = dStrdup (id);
-};
+}
 
 /**
  * \brief split a string at sep chars and return a SimpleVector of strings
@@ -134,7 +142,7 @@ void StyleEngine::setClass (const char *klass) {
    DoctreeNode *dn = doctree->top ();
    assert (dn->klass == NULL);
    dn->klass = splitStr (klass, ' ');
-};
+}
 
 void StyleEngine::setStyle (const char *styleAttr) {
    Node *n = stack->getRef (stack->size () - 1);
@@ -148,7 +156,7 @@ void StyleEngine::setStyle (const char *styleAttr) {
                                         n->styleAttrProperties,
                                         n->styleAttrPropertiesImportant);
    }
-};
+}
 
 /**
  * \brief Instruct StyleEngine to use the nonCssHints from parent element
@@ -157,19 +165,25 @@ void StyleEngine::setStyle (const char *styleAttr) {
  */
 void StyleEngine::inheritNonCssHints () {
    Node *pn = stack->getRef (stack->size () - 2);
-   Node *n = stack->getRef (stack->size () - 1);
 
-   if (pn->nonCssProperties)
-      n->nonCssProperties = new CssPropertyList (*pn->nonCssProperties, true);
+   if (pn->nonCssProperties) {
+      Node *n = stack->getRef (stack->size () - 1);
+      CssPropertyList *origNonCssProperties = n->nonCssProperties;
+
+      n->nonCssProperties = new CssPropertyList(*pn->nonCssProperties, true);
+
+      if (origNonCssProperties) // original nonCssProperties have precedence
+         origNonCssProperties->apply (n->nonCssProperties);
+
+      delete origNonCssProperties;
+   }
 }
 
 void StyleEngine::clearNonCssHints () {
    Node *n = stack->getRef (stack->size () - 1);
 
-   if (n->nonCssProperties) {
-      delete n->nonCssProperties;
-      n->nonCssProperties = NULL;
-   }
+   delete n->nonCssProperties;
+   n->nonCssProperties = NULL;
 }
 
 /**
@@ -215,23 +229,8 @@ void StyleEngine::setPseudoVisited () {
 void StyleEngine::endElement (int element) {
    assert (element == doctree->top ()->element);
 
-   Node *n = stack->getRef (stack->size () - 1);
-
-   if (n->styleAttrProperties)
-      delete n->styleAttrProperties;
-   if (n->styleAttrPropertiesImportant)
-      delete n->styleAttrPropertiesImportant;
-   if (n->nonCssProperties)
-      delete n->nonCssProperties;
-   if (n->style)
-      n->style->unref ();
-   if (n->wordStyle)
-      n->wordStyle->unref ();
-   if (n->backgroundStyle)
-      n->backgroundStyle->unref ();
-
+   stackPop ();
    doctree->pop ();
-   stack->setSize (stack->size () - 1);
 }
 
 void StyleEngine::preprocessAttrs (dw::core::style::StyleAttrs *attrs) {
@@ -598,6 +597,13 @@ void StyleEngine::apply (int i, StyleAttrs *attrs, CssPropertyList *props) {
          case PROPERTY_X_LINK:
             attrs->x_link = p->value.intVal;
             break;
+         case PROPERTY_X_LANG:
+            attrs->x_lang[0] = D_ASCII_TOLOWER(p->value.strVal[0]);
+            if (attrs->x_lang[0])
+               attrs->x_lang[1] = D_ASCII_TOLOWER(p->value.strVal[1]);
+            else
+               attrs->x_lang[1] = 0;
+            break;
          case PROPERTY_X_IMG:
             attrs->x_img = p->value.intVal;
             break;
@@ -709,7 +715,7 @@ Style * StyleEngine::backgroundStyle () {
 
       assert (attrs.backgroundColor);
       stack->getRef (stack->size () - 1)->backgroundStyle =
-         Style::create (layout, &attrs);
+         Style::create (&attrs);
    }
    return stack->getRef (stack->size () - 1)->backgroundStyle;
 }
@@ -751,7 +757,7 @@ Style * StyleEngine::style0 (int i) {
 
    postprocessAttrs (&attrs);
 
-   stack->getRef (i)->style = Style::create (layout, &attrs);
+   stack->getRef (i)->style = Style::create (&attrs);
 
    return stack->getRef (i)->style;
 }
@@ -765,7 +771,7 @@ Style * StyleEngine::wordStyle0 () {
 
    attrs.valign = style ()->valign;
 
-   stack->getRef(stack->size() - 1)->wordStyle = Style::create(layout, &attrs);
+   stack->getRef(stack->size() - 1)->wordStyle = Style::create(&attrs);
    return stack->getRef (stack->size () - 1)->wordStyle;
 }
 
@@ -806,4 +812,75 @@ void StyleEngine::parse (DilloHtml *html, DilloUrl *url, const char *buf,
    importDepth++;
    CssParser::parse (html, url, cssContext, buf, buflen, origin);
    importDepth--;
+}
+
+/**
+ * \brief Create the user agent style.
+ *
+ * The user agent style defines how dillo renders HTML in the absence of
+ * author or user styles.
+ */
+void StyleEngine::buildUserAgentStyle () {
+   const char *cssBuf =
+      "body  {margin: 5px}"
+      "big {font-size: 1.17em}"
+      "blockquote, dd {margin-left: 40px; margin-right: 40px}"
+      "center {text-align: center}"
+      "dt {font-weight: bolder}"
+      ":link {color: blue; text-decoration: underline; cursor: pointer}"
+      ":visited {color: #800080; text-decoration: underline; cursor: pointer}"
+      "h1, h2, h3, h4, h5, h6, b, strong {font-weight: bolder}"
+      "address, center, div, h1, h2, h3, h4, h5, h6, ol, p, ul, pre {display: block}"
+      "i, em, cite, address, var {font-style: italic}"
+      ":link img, :visited img {border: 1px solid}"
+      "frameset, ul, ol, dir {margin-left: 40px}"
+      /* WORKAROUND: It should be margin: 1em 0
+       * but as we don't collapse these margins yet, it
+       * look better like this.
+       */
+      "p {margin: 0.5em 0}"
+      "h1 {font-size: 2em; margin-top: .67em; margin-bottom: 0}"
+      "h2 {font-size: 1.5em; margin-top: .75em; margin-bottom: 0}"
+      "h3 {font-size: 1.17em; margin-top: .83em; margin-bottom: 0}"
+      "h4 {margin-top: 1.12em; margin-bottom: 0}"
+      "h5 {font-size: 0.83em; margin-top: 1.5em; margin-bottom: 0}"
+      "h6 {font-size: 0.75em; margin-top: 1.67em; margin-bottom: 0}"
+      "hr {width: 100%; border: 1px inset}"
+      "li {margin-top: 0.1em; display: list-item}"
+      "pre {white-space: pre}"
+      "ol {list-style-type: decimal}"
+      "ul {list-style-type: disc}"
+      "ul ul {list-style-type: circle}"
+      "ul ul ul {list-style-type: square}"
+      "ul ul ul ul {list-style-type: disc}"
+      "u {text-decoration: underline}"
+      "small, sub, sup {font-size: 0.83em}"
+      "sub {vertical-align: sub}"
+      "sup {vertical-align: super}"
+      "s, strike, del {text-decoration: line-through}"
+      "table {border-spacing: 2px}"
+      "td, th {padding: 2px}"
+      "thead, tbody, tfoot {vertical-align: middle}"
+      "th {font-weight: bolder; text-align: center}"
+      "code, tt, pre, samp, kbd {font-family: monospace}"
+      /* WORKAROUND: Reset font properties in tables as some
+       * pages rely on it (e.g. gmail).
+       * http://developer.mozilla.org/En/Fixing_Table_Inheritance_in_Quirks_Mode
+       * has a detailed description of the issue.
+       */
+      "table, caption {font-size: medium; font-weight: normal}";
+
+   CssParser::parse (NULL, NULL, cssContext, cssBuf, strlen (cssBuf),
+                     CSS_ORIGIN_USER_AGENT);
+}
+
+void StyleEngine::buildUserStyle () {
+   Dstr *style;
+   char *filename = dStrconcat(dGethomedir(), "/.dillo/style.css", NULL);
+
+   if ((style = a_Misc_file2dstr(filename))) {
+      CssParser::parse (NULL,NULL,cssContext,style->str, style->len,CSS_ORIGIN_USER);
+      dStr_free (style, 1);
+   }
+   dFree (filename);
 }

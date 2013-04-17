@@ -260,6 +260,7 @@ enum TextTransform {
 enum DisplayType {
    DISPLAY_BLOCK,
    DISPLAY_INLINE,
+   DISPLAY_INLINE_BLOCK,
    DISPLAY_LIST_ITEM,
    DISPLAY_NONE,
    DISPLAY_TABLE,
@@ -467,6 +468,10 @@ public:
    int x_link;
    int x_img;
    Tooltip *x_tooltip;
+   char x_lang[2]; /* Either x_lang[0] == x_lang[1] == 0 (no language
+                      set), or x_lang contains the RFC 1766 country
+                      code in lower case letters. (Only two letters
+                      allowed, currently.) */
 
    void initValues ();
    void resetValues ();
@@ -524,7 +529,7 @@ protected:
    void copyAttrs (StyleAttrs *attrs);
 
 public:
-   inline static Style *create (Layout *layout, StyleAttrs *attrs)
+   inline static Style *create (StyleAttrs *attrs)
    {
       Style *style = styleTable->get (attrs);
       if (style) {
@@ -681,8 +686,8 @@ void drawBackground (View *view, Rectangle *area,
 void numtostr (int num, char *buf, int buflen, ListStyleType listStyleType);
 
 } // namespace style
-} // namespace dw
 } // namespace core
+} // namespace dw
 
 #endif // __DW_STYLE_HH__
 

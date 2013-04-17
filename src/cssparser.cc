@@ -71,8 +71,8 @@ static const char *const Css_cursor_enum_vals[] = {
 };
 
 static const char *const Css_display_enum_vals[] = {
-   "block", "inline", "list-item", "none", "table", "table-row-group",
-   "table-header-group", "table-footer-group", "table-row",
+   "block", "inline", "inline-block", "list-item", "none", "table",
+   "table-row-group", "table-header-group", "table-footer-group", "table-row",
    "table-cell", NULL
 };
 
@@ -412,7 +412,7 @@ static const CssShorthandInfo Css_shorthand_info[] = {
 };
 
 #define CSS_SHORTHAND_NUM \
-   (sizeof(Css_shorthand_info) / sizeof(CssShorthandInfo))
+   (sizeof(Css_shorthand_info) / sizeof(Css_shorthand_info[0]))
 
 /* ----------------------------------------------------------------------
  *    Parsing
@@ -697,7 +697,7 @@ bool CssParser::tokenMatchesProperty(CssPropertyName prop, CssValueType *type)
       case CSS_TYPE_LENGTH_PERCENTAGE:
       case CSS_TYPE_LENGTH_PERCENTAGE_NUMBER:
       case CSS_TYPE_LENGTH:
-         if  (tval[0] == '-')
+         if (tval[0] == '-')
             return false;
          // Fall Through
       case CSS_TYPE_SIGNED_LENGTH:
@@ -1059,7 +1059,7 @@ void CssParser::parseDeclaration(CssPropertyList * props,
 
    CssPropertyName prop;
    CssPropertyValue val, dir_vals[4];
-   CssValueType  dir_types[4];
+   CssValueType dir_types[4];
    bool found, weight;
    int sh_index, i, j, n;
    int dir_set[4][4] = {
@@ -1257,7 +1257,7 @@ bool CssParser::parseSimpleSelector(CssSimpleSelector *selector)
       if (selectType != CssSimpleSelector::SELECT_NONE) {
          nextToken();
          if (spaceSeparated)
-            return true;
+            return false;
 
          if (ttype == CSS_TK_SYMBOL) {
             selector->setSelect (selectType, tval);
@@ -1292,13 +1292,13 @@ CssSelector *CssParser::parseSelector()
          (tval[0] == ',' || tval[0] == '{')) {
          break;
       } else if (ttype == CSS_TK_CHAR && tval[0] == '>') {
-         selector->addSimpleSelector (CssSelector::CHILD);
+         selector->addSimpleSelector (CssSelector::COMB_CHILD);
          nextToken();
       } else if (ttype == CSS_TK_CHAR && tval[0] == '+') {
-         selector->addSimpleSelector (CssSelector::ADJACENT_SIBLING);
+         selector->addSimpleSelector (CssSelector::COMB_ADJACENT_SIBLING);
          nextToken();
       } else if (ttype != CSS_TK_END && spaceSeparated) {
-         selector->addSimpleSelector (CssSelector::DESCENDANT);
+         selector->addSimpleSelector (CssSelector::COMB_DESCENDANT);
       } else {
          delete selector;
          selector = NULL;
