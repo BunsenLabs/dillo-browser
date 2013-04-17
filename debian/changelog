@@ -7,6 +7,8 @@ dillo (3.0.3-1) experimental; urgency=low
   * Bump debhelper compatibility to 9
     + Use debian/clean instead of calling rm multiple times in debian/rules
     + Update versioned build-dependency on debhelper
+    + Use dh_auto_{configure,install}, remove duplicate "make install"
+    + Use dh_install instead of calling install directly
   * Bump Standards-Version to 3.9.4 (no changes)
 
  -- Axel Beckert <abe@debian.org>  Wed, 17 Apr 2013 16:59:43 +0200
