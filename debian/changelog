@@ -1,3 +1,9 @@
+dillo (3.0.3-2) experimental; urgency=low
+
+  * Add patch by Pino Toscano <pino@debian.org> to fix FTBFS on Hurd.
+
+ -- Axel Beckert <abe@debian.org>  Fri, 19 Apr 2013 17:36:01 +0200
+
 dillo (3.0.3-1) experimental; urgency=low
 
   * New upstream release
