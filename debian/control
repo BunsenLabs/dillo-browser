@@ -11,6 +11,7 @@ Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/dillo.git
 Package: dillo
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, wget
+Recommends: ${perl:Depends}, perl-modules
 Provides: www-browser
 Description: Small and fast web browser
  Dillo 3 is a graphical multi-platform web browser known for its speed

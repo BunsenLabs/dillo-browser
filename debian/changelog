@@ -1,6 +1,8 @@
 dillo (3.0.3-2) experimental; urgency=low
 
   * Add patch by Pino Toscano <pino@debian.org> to fix FTBFS on Hurd.
+  * Add Recommends on ${perl:Depends} and perl-modules for new
+    dillo-install-hyphenation script (Thanks to Pino Toscano for the hint!)
 
  -- Axel Beckert <abe@debian.org>  Fri, 19 Apr 2013 17:36:01 +0200
 
