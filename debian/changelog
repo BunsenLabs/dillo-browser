@@ -3,6 +3,7 @@ dillo (3.0.3-2) experimental; urgency=low
   * Add patch by Pino Toscano <pino@debian.org> to fix FTBFS on Hurd.
   * Add Recommends on ${perl:Depends} and perl-modules for new
     dillo-install-hyphenation script (Thanks to Pino Toscano for the hint!)
+    Mention the reason for the recommendation in the long description.
   * Replace category Application by WebBrowser in dillo.desktop (Thanks to
     Pino Toscano for the hint!)
 

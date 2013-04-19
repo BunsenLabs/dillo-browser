@@ -20,3 +20,6 @@ Description: Small and fast web browser
  .
  It aims to be small in resources, stable, developer-friendly, usable,
  very fast, and extensible.
+ .
+ To run the included dillo-install-hyphenation script the recommended
+ perl packages need to be installed.
