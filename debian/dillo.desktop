@@ -8,5 +8,5 @@ MimeType=text/html;text/xml;application/xhtml+xml;
 Exec=dillo
 Terminal=false
 Type=Application
-Categories=Application;Network;
+Categories=Network;WebBrowser;
 Icon=dillo
