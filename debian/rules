@@ -3,7 +3,7 @@
 #export DH_VERBOSE=1
 
 # Needed until the next Dillo release (i.e. Dillo > 3.0.3)
-export DEB_LDFLAGS_MAINT_APPEND=-lX11
+export DEB_LDFLAGS_MAINT_APPEND=-lX11 -lpthread
 
 %:
 	dh $@ --with autoreconf
