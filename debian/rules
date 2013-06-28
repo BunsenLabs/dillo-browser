@@ -3,7 +3,9 @@
 #export DH_VERBOSE=1
 
 # Needed on non-linux architectures, see http://bugs.debian.org/713956
+ifneq ($(DEB_BUILD_ARCH_OS),linux)
 export DEB_LDFLAGS_MAINT_APPEND=-lpthread
+endif
 
 %:
 	dh $@ --with autoreconf
