@@ -3,15 +3,26 @@ Section: web
 Priority: extra
 Maintainer: Axel Beckert <abe@debian.org>
 Standards-Version: 3.9.4
-Build-Depends: debhelper (>= 9~), libfltk1.3-dev, libglib2.0-dev, libpng-dev | libpng12-dev, zlib1g-dev, libjpeg8-dev | libjpeg-dev, dh-autoreconf, libssl-dev, dpkg-dev (>= 1.16.1~)
+Build-Depends: debhelper (>= 9~),
+               dh-autoreconf,
+               dpkg-dev (>= 1.16.1~),
+               libfltk1.3-dev,
+               libglib2.0-dev,
+               libjpeg8-dev | libjpeg-dev,
+               libpng-dev | libpng12-dev,
+               libssl-dev,
+               zlib1g-dev
 Homepage: http://www.dillo.org/
 Vcs-Git: git://anonscm.debian.org/collab-maint/dillo.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/dillo.git
 
 Package: dillo
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, wget
-Recommends: ${perl:Depends}, perl-modules
+Depends: wget,
+         ${misc:Depends},
+         ${shlibs:Depends}
+Recommends: perl-modules,
+            ${perl:Depends}
 Provides: www-browser
 Description: Small and fast web browser
  Dillo 3 is a graphical multi-platform web browser known for its speed
