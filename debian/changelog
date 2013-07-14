@@ -1,4 +1,4 @@
-dillo (3.0.3-6) UNRELEASED; urgency=low
+dillo (3.0.3-6) unstable; urgency=low
 
   * Apply wrap-and-sort
   * Remove fix for #713557 again as the real cause was #713933 in
@@ -6,7 +6,7 @@ dillo (3.0.3-6) UNRELEASED; urgency=low
   * Use DEB_LDFLAGS_MAINT_APPEND=-lpthread only on non-linux as it causes
     helper applications to be linked unnecessarily with libpthread, too.
 
- -- Axel Beckert <abe@debian.org>  Fri, 28 Jun 2013 11:25:30 +0200
+ -- Axel Beckert <abe@debian.org>  Sun, 14 Jul 2013 15:37:38 +0200
 
 dillo (3.0.3-5) unstable; urgency=low
 
