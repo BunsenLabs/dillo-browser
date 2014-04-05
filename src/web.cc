@@ -67,16 +67,20 @@ int a_Web_dispatch_by_type (const char *Type, DilloWeb *Web,
       style::Color *bgColor = style::Color::create (layout, prefs.bg_color);
       Web->bgColor = bgColor->getColor ();
       layout->setBgColor (bgColor);
+      layout->setBgImage (NULL, style::BACKGROUND_REPEAT,
+                          style::BACKGROUND_ATTACHMENT_SCROLL,
+                          style::createPerLength (0),
+                          style::createPerLength (0));
 
       /* Set a style for the widget */
-      StyleEngine styleEngine (layout);
-      styleEngine.startElement ("body");
+      StyleEngine styleEngine (layout, Web->url, Web->url);
+      styleEngine.startElement ("body", Web->bw);
 
       dw = (Widget*) viewer(Type, Web, Call, Data);
       if (dw == NULL)
          return -1;
 
-      dw->setStyle (styleEngine.style ());
+      dw->setStyle (styleEngine.style (Web->bw));
 
       /* This method frees the old dw if any */
       layout->setWidget(dw);

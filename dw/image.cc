@@ -22,6 +22,7 @@
 #include "image.hh"
 #include "../lout/msg.h"
 #include "../lout/misc.hh"
+#include "../lout/debug.hh"
 
 namespace dw {
 
@@ -143,6 +144,7 @@ int Image::CLASS_ID = -1;
 
 Image::Image(const char *altText)
 {
+   DBG_OBJ_CREATE ("dw::Image");
    registerName ("dw::Image", &CLASS_ID);
    this->altText = altText ? strdup (altText) : NULL;
    altTextWidth = -1; // not yet calculated
@@ -162,6 +164,8 @@ Image::~Image()
       buffer->unref ();
    if (mapKey)
       delete mapKey;
+
+   DBG_OBJ_DELETE ();
 }
 
 void Image::sizeRequestImpl (core::Requisition *requisition)
@@ -433,6 +437,8 @@ void Image::setBuffer (core::Imgbuf *buffer, bool resize)
       buffer->ref ();
    }
 
+   DBG_OBJ_ASSOC_CHILD (this->buffer);
+
    if (oldBuf)
       oldBuf->unref ();
 }
@@ -448,6 +454,16 @@ void Image::drawRow (int row)
       queueDrawArea (area.x + getStyle()->boxOffsetX (),
                      area.y + getStyle()->boxOffsetY (),
                      area.width, area.height);
+}
+
+void Image::finish ()
+{
+   // Nothing to do; images are always drawn line by line.
+}
+
+void Image::fatal ()
+{
+   // Could display an error.
 }
 
 

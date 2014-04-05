@@ -14,9 +14,14 @@
 # geometry=650x545+0+20
 #geometry=780x580
 
-# Change this if you want to have text-only browsing from the start.
-# (While browsing, this can be changed from the tools/settings menu.)
+# Change this (and the following option) if you want to have text-only browsing
+# from the start. (While browsing, this can be changed from the tools/settings
+# menu.)
 #load_images=YES
+
+# Change this if you do not want background images to be loaded initially.
+# (While browsing, this can be changed from the tools/settings menu.)
+#load_background_images=YES
 
 # Change this if you want to disable loading of CSS stylesheets initially.
 # (While browsing, this can be changed from the tools/settings menu.)
@@ -68,7 +73,7 @@
 # Minimum font size in pixels
 #font_min_size=6
 
-# Show tooltip popups for UI and for HTML title attributes
+# Show tooltip popups for HTML title attributes
 #show_tooltip=YES
 
 # Set this to YES if you want to limit the word wrap width to the viewport
@@ -116,6 +121,12 @@
 # Notice that there is no "penalty_em_dash_left_2", since breaking
 # left of an em-dash makes the line *begin*, not *end* with a dash.
 
+# This factor is multiplied with the line height to get the
+# stretchability of a non-justified line. The larger this factor (and
+# thus, the stretchability), the less likely the words are hyphenated;
+# so you can use this value to control hyphenation of non-justified
+# text.
+#stretchability_factor=1
 
 #-------------------------------------------------------------------------
 #                            PARSING SECTION
@@ -146,7 +157,7 @@
 # Format: search_url="[<label> ]<url>"
 # You can enable multiple search_url strings at once and select from among
 # them at runtime, with the first being the default.
-search_url="http://duckduckgo.com/lite/?kp=-1&q=%s"
+search_url="DuckDuckGo http://duckduckgo.com/lite/?kp=-1&q=%s"
 search_url="Wikipedia http://www.wikipedia.org/w/index.php?search=%s&go=Go"
 search_url="Free Dictionary http://www.thefreedictionary.com/%s"
 search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
@@ -198,8 +209,8 @@ search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
 #
 # See http://zytrax.com/tech/web/browser_ids.htm for a compilation of strings.
 #
-# http_user_agent="Mozilla/5.0 (Windows NT 5.1; rv:18.0) Gecko/20100101 Firefox/18.0"
-# http_user_agent="Wget/1.12 (linux-gnu)"
+# http_user_agent="Mozilla/5.0 (Windows NT 6.1; WOW64; rv:25.0) Gecko/20100101 Firefox/25.0"
+# http_user_agent="Wget/1.13.4 (linux-gnu)"
 #The default is "Dillo/"+current_version_number
 
 #-------------------------------------------------------------------------
@@ -213,6 +224,10 @@ search_url="Google http://www.google.com/search?ie=UTF-8&oe=UTF-8&q=%s"
 
 # If your eyes suffer with white backgrounds, change this.
 #allow_white_bg=YES
+
+# If allow_white_bg is set to NO, white backgrounds are replaced by
+# this color.
+#white_bg_replacement=0xe0e0a3
 
 # When set to YES, the page author's visited link color may be overridden
 # to allow better contrast with text/links/background
@@ -316,9 +331,13 @@ ui_tab_bg_color=#b7beb7
 #show_tools=YES
 #show_filemenu=YES
 #show_clear_url=YES
+#show_url=YES
 #show_search=YES
 #show_help=YES
 #show_progress_box=YES
+
+# Show tooltip popups for the UI
+#show_ui_tooltip=YES
 
 # Start dillo with the panels hidden?
 #fullwindow_start=NO

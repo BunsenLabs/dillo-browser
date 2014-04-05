@@ -37,6 +37,8 @@ typedef enum {
                                    'margin-*-width'). */
    CSS_TYPE_SIGNED_LENGTH,      /* As CSS_TYPE_LENGTH but may be negative. */
    CSS_TYPE_LENGTH_PERCENTAGE_NUMBER,  /* <length> or <percentage>, or <number> */
+   CSS_TYPE_AUTO,               /* Represented as CssLength of type
+                                   CSS_LENGTH_TYPE_AUTO */
    CSS_TYPE_COLOR,              /* Represented as integer. */
    CSS_TYPE_FONT_WEIGHT,        /* this very special and only used by
                                    'font-weight' */
@@ -45,6 +47,8 @@ typedef enum {
                                    opposed to CSS_TYPE_ENUM and
                                    CSS_TYPE_MULTI_ENUM). Used for
                                    'font-family'. */
+   CSS_TYPE_URI,                /* <uri> */
+   CSS_TYPE_BACKGROUND_POSITION,
    CSS_TYPE_UNUSED              /* Not yet used. Will itself get unused some
                                    day. */
 } CssValueType;
@@ -139,6 +143,7 @@ inline float CSS_LENGTH_VALUE (CssLength l) {
 }
 
 typedef enum {
+   CSS_PROPERTY_END = -1, // used as terminator in CssShorthandInfo
    CSS_PROPERTY_BACKGROUND_ATTACHMENT,
    CSS_PROPERTY_BACKGROUND_COLOR,
    CSS_PROPERTY_BACKGROUND_IMAGE,
@@ -229,9 +234,15 @@ typedef enum {
    CSS_PROPERTY_LAST
 } CssPropertyName;
 
+typedef struct {
+   int32_t posX;
+   int32_t posY;
+} CssBackgroundPosition;
+
 typedef union {
    int32_t intVal;
    char *strVal;
+   CssBackgroundPosition *posVal;
 } CssPropertyValue;
 
 typedef enum {
@@ -283,8 +294,11 @@ class CssProperty {
          switch (type) {
             case CSS_TYPE_STRING:
             case CSS_TYPE_SYMBOL:
+            case CSS_TYPE_URI:
                dFree (value.strVal);
                break;
+            case CSS_TYPE_BACKGROUND_POSITION:
+               dFree (value.posVal);
             default:
                break;
          }
@@ -323,7 +337,7 @@ class CssSimpleSelector {
    private:
       int element;
       char *pseudo, *id;
-      lout::misc::SimpleVector <char *> *klass;
+      lout::misc::SimpleVector <char *> klass;
 
    public:
       enum {
@@ -342,13 +356,18 @@ class CssSimpleSelector {
       ~CssSimpleSelector ();
       inline void setElement (int e) { element = e; };
       void setSelect (SelectType t, const char *v);
-      inline lout::misc::SimpleVector <char *> *getClass () { return klass; };
+      inline lout::misc::SimpleVector <char *> *getClass () { return &klass; };
       inline const char *getPseudoClass () { return pseudo; };
       inline const char *getId () { return id; };
       inline int getElement () { return element; };
       bool match (const DoctreeNode *node);
       int specificity ();
       void print ();
+};
+
+class MatchCache : public lout::misc::SimpleVector <int> {
+   public:
+      MatchCache() : lout::misc::SimpleVector <int> (0) {};
 };
 
 /**
@@ -367,27 +386,36 @@ class CssSelector {
 
    private:
       struct CombinatorAndSelector {
-         int notMatchingBefore; // used for optimizing CSS selector matching
          Combinator combinator;
          CssSimpleSelector *selector;
       };
 
-      int refCount;
-      lout::misc::SimpleVector <struct CombinatorAndSelector> *selectorList;
+      int refCount, matchCacheOffset;
+      lout::misc::SimpleVector <struct CombinatorAndSelector> selectorList;
 
-      bool match (Doctree *dt, const DoctreeNode *node, int i, Combinator comb);
+      bool match (Doctree *dt, const DoctreeNode *node, int i, Combinator comb,
+                  MatchCache *matchCache);
 
    public:
       CssSelector ();
       ~CssSelector ();
       void addSimpleSelector (Combinator c);
       inline CssSimpleSelector *top () {
-         return selectorList->getRef (selectorList->size () - 1)->selector;
-      };
-      inline int size () { return selectorList->size (); };
-      inline bool match (Doctree *dt, const DoctreeNode *node) {
-         return match (dt, node, selectorList->size () - 1, COMB_NONE);
-      };
+         return selectorList.getRef (selectorList.size () - 1)->selector;
+      }
+      inline int size () { return selectorList.size (); };
+      inline bool match (Doctree *dt, const DoctreeNode *node,
+                         MatchCache *matchCache) {
+         return match (dt, node, selectorList.size () - 1, COMB_NONE,
+                       matchCache);
+      }
+      inline void setMatchCacheOffset (int mo) {
+         if (matchCacheOffset == -1)
+            matchCacheOffset = mo;
+      }
+      inline int getRequiredMatchCache () {
+         return matchCacheOffset + size ();
+      }
       int specificity ();
       bool checksPseudoClass ();
       void print ();
@@ -411,8 +439,8 @@ class CssRule {
       CssRule (CssSelector *selector, CssPropertyList *props, int pos);
       ~CssRule ();
 
-      void apply (CssPropertyList *props,
-                  Doctree *docTree, const DoctreeNode *node);
+      void apply (CssPropertyList *props, Doctree *docTree,
+                  const DoctreeNode *node, MatchCache *matchCache) const;
       inline bool isSafe () {
          return !selector->checksPseudoClass () || props->isSafe ();
       };
@@ -451,15 +479,23 @@ class CssStyleSheet {
                <lout::object::ConstString, RuleList > (true, true, 256) {};
       };
 
-      static const int ntags = 90; // \todo replace 90
+      static const int ntags = 90 + 14; // \todo don't hardcode
+      /* 90 is the full number of html4 elements, including those which we have
+       * implemented. From html5, let's add: article, header, footer, mark,
+       * nav, section, aside, figure, figcaption, wbr, audio, video, source,
+       * embed.
+       */
 
       RuleList elementTable[ntags], anyTable;
       RuleMap idTable, classTable;
+      int requiredMatchCache;
 
    public:
+      CssStyleSheet () { requiredMatchCache = 0; }
       void addRule (CssRule *rule);
-      void apply (CssPropertyList *props,
-                  Doctree *docTree, const DoctreeNode *node);
+      void apply (CssPropertyList *props, Doctree *docTree,
+                  const DoctreeNode *node, MatchCache *matchCache) const;
+      int getRequiredMatchCache () { return requiredMatchCache; }
 };
 
 /**
@@ -467,7 +503,9 @@ class CssStyleSheet {
  */
 class CssContext {
    private:
+      static CssStyleSheet userAgentSheet;
       CssStyleSheet sheet[CSS_PRIMARY_USER_IMPORTANT + 1];
+      MatchCache matchCache;
       int pos;
 
    public:

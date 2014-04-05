@@ -2,7 +2,8 @@
 #define __CSSPARSER_HH__
 
 #include "css.hh"
-#include "html_common.hh"
+
+class DilloHtml;
 
 class CssParser {
    private:
@@ -14,6 +15,7 @@ class CssParser {
       static const int maxStrLen = 256;
       CssContext *context;
       CssOrigin origin;
+      const DilloUrl *baseUrl;
 
       const char *buf;
       int buflen, bufptr;
@@ -23,7 +25,7 @@ class CssParser {
       bool withinBlock;
       bool spaceSeparated; /* used when parsing CSS selectors */
 
-      CssParser(CssContext *context, CssOrigin origin,
+      CssParser(CssContext *context, CssOrigin origin, const DilloUrl *baseUrl,
                 const char *buf, int buflen);
       int getChar();
       void ungetChar();
@@ -39,7 +41,7 @@ class CssParser {
                             CssPropertyList * importantProps);
       bool parseSimpleSelector(CssSimpleSelector *selector);
       char *parseUrl();
-      void parseImport(DilloHtml *html, DilloUrl *url);
+      void parseImport(DilloHtml *html);
       void parseMedia();
       CssSelector *parseSelector();
       void parseRuleset();
@@ -47,10 +49,11 @@ class CssParser {
       void ignoreStatement();
 
    public:
-      static void parseDeclarationBlock(const char *buf, int buflen,
+      static void parseDeclarationBlock(const DilloUrl *baseUrl,
+                                        const char *buf, int buflen,
                                         CssPropertyList *props,
                                         CssPropertyList *propsImortant);
-      static void parse(DilloHtml *html, DilloUrl *url, CssContext *context,
+      static void parse(DilloHtml *html, const DilloUrl *baseUrl, CssContext *context,
                         const char *buf, int buflen, CssOrigin origin);
       static const char *propertyNameString(CssPropertyName name);
 };

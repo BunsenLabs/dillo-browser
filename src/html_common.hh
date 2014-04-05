@@ -41,6 +41,7 @@
 
 typedef enum {
    DT_NONE,
+   DT_UNRECOGNIZED,
    DT_HTML,
    DT_XHTML
 } DilloHtmlDocumentType;
@@ -80,11 +81,15 @@ typedef enum {
    IN_FORM        = 1 << 3,
    IN_SELECT      = 1 << 4,
    IN_OPTION      = 1 << 5,
-   IN_TEXTAREA    = 1 << 6,
-   IN_MAP         = 1 << 7,
-   IN_PRE         = 1 << 8,
-   IN_BUTTON      = 1 << 9,
-   IN_LI          = 1 << 10,
+   IN_OPTGROUP    = 1 << 6,
+   IN_TEXTAREA    = 1 << 7,
+   IN_BUTTON      = 1 << 8,
+   IN_MAP         = 1 << 9,
+   IN_PRE         = 1 << 10,
+   IN_LI          = 1 << 11,
+   IN_MEDIA       = 1 << 12,
+   IN_META_HACK   = 1 << 13,
+   IN_EOF         = 1 << 14,
 } DilloHtmlProcessingState;
 
 /*
@@ -177,7 +182,8 @@ public:  //BUG: for now everything is public
    bool TagSoup;          /* Flag to enable the parser's cleanup functions */
    bool loadCssFromStash; /* current stash content should be loaded as CSS */
 
-   /* element counters: used for validation purposes */
+   /* element counters: used for validation purposes.
+    * ATM they're used as three state flags {0,1,>1} */
    uchar_t Num_HTML, Num_HEAD, Num_BODY, Num_TITLE;
 
    Dstr *attr_data;       /* Buffer for attribute value */
@@ -213,6 +219,22 @@ public:
    bool_t unloadedImages();
    void loadImages (const DilloUrl *pattern);
    void addCssUrl(const DilloUrl *url);
+
+   // useful shortcuts
+   inline void startElement (int tag)
+   { styleEngine->startElement (tag, bw); }
+   inline void startElement (const char *tagname)
+   { styleEngine->startElement (tagname, bw); }
+
+   inline dw::core::style::Style *backgroundStyle ()
+   { return styleEngine->backgroundStyle (bw); }
+   inline dw::core::style::Style *style ()
+   { return styleEngine->style (bw); }
+   inline dw::core::style::Style *wordStyle ()
+   { return styleEngine->wordStyle (bw); }
+
+   inline void restyle () { styleEngine->restyle (bw); }
+
 };
 
 /*
@@ -236,7 +258,7 @@ DilloUrl *a_Html_url_new(DilloHtml *html,
                          const char *url_str, const char *base_url,
                          int use_base_url);
 
-void a_Html_image_attrs(DilloHtml *html, const char *tag, int tagsize);
+void a_Html_common_image_attrs(DilloHtml *html, const char *tag, int tagsize);
 DilloImage *a_Html_image_new(DilloHtml *html, const char *tag, int tagsize);
 
 char *a_Html_parse_entities(DilloHtml *html, const char *token, int toksize);

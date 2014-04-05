@@ -26,6 +26,9 @@ class View;
 class Widget;
 class Iterator;
 
+// Nothing yet to free.
+inline void freeall () { }
+
 namespace ui {
 
 class ResourceFactory;
@@ -41,6 +44,7 @@ class ResourceFactory;
 #include "types.hh"
 #include "events.hh"
 #include "imgbuf.hh"
+#include "imgrenderer.hh"
 #include "style.hh"
 #include "view.hh"
 #include "platform.hh"

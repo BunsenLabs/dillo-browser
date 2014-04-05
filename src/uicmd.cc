@@ -70,6 +70,7 @@ static const char *save_dir = "";
  */
 static BrowserWindow *UIcmd_tab_new(CustTabs *tabs, UI *old_ui, int focus);
 static void close_tab_btn_cb (Fl_Widget *w, void *cb_data);
+static char *UIcmd_make_search_str(const char *str);
 
 //----------------------------------------------------------------------------
 
@@ -124,7 +125,7 @@ class CustTabs : public Fl_Group {
          for (int i = 0; i < num_tabs(); ++i)
             btns[i] = (CustTabButton*)Pack->child(i);
          qsort(btns, num_tabs(), sizeof(CustTabButton *), btn_cmp);
-         focus_counter = 0; 
+         focus_counter = 0;
          for (int i = 0; i < num_tabs(); ++i)
             btns[i]->focus_num(focus_counter++);
          dFree(btns);
@@ -497,7 +498,7 @@ static void win_cb (Fl_Widget *w, void *cb_data) {
       // (most likely with modifiers).
       return;
    }
-      
+
    if (prefs.show_quit_dialog && ntabs > 1)
       choice = a_Dialog_choice("Dillo: Close window?",
                                "Window contains more than one tab.",
@@ -582,6 +583,9 @@ static BrowserWindow *UIcmd_tab_new(CustTabs *tabs, UI *old_ui, int focus)
    Layout *layout = new Layout (platform);
    style::Color *bgColor = style::Color::create (layout, prefs.bg_color);
    layout->setBgColor (bgColor);
+   layout->setBgImage (NULL, style::BACKGROUND_REPEAT,
+                       style::BACKGROUND_ATTACHMENT_SCROLL,
+                       style::createPerLength (0), style::createPerLength (0));
 
    // set_render_layout() sets the proper viewport size
    FltkViewport *viewport = new FltkViewport (0, 0, 0, 1);
@@ -649,6 +653,33 @@ void a_UIcmd_close_all_bw(void *)
 }
 
 /*
+ * Return a search string of the suffix if str starts with a
+ * prefix of a search engine name and a blank
+ */
+static char *UIcmd_find_search_str(const char *str)
+{
+   int p;
+   char *url = NULL;
+   int len = strcspn(str, " ");
+
+   if (len > 0 && str[len] != '\0') {
+      /* we found a ' ' in str, check whether the first part of str
+       * is a prefix of a search_url label
+       */
+      for (p = 0; p < dList_length(prefs.search_urls); p++) {
+         const char *search =
+            (const char *)dList_nth_data(prefs.search_urls, p);
+         if (strncasecmp(str, search, len) == 0) {
+            prefs.search_url_idx = p;
+            url = UIcmd_make_search_str(str + len + 1);
+            break;
+         }
+      }
+   }
+   return url;
+}
+
+/*
  * Open a new URL in the given browser window.
  *
  * our custom "file:" URIs are normalized here too.
@@ -656,10 +687,14 @@ void a_UIcmd_close_all_bw(void *)
 void a_UIcmd_open_urlstr(void *vbw, const char *urlstr)
 {
    char *new_urlstr;
+   char *search_urlstr = NULL;
    DilloUrl *url;
    int ch;
    BrowserWindow *bw = (BrowserWindow*)vbw;
 
+   if ((search_urlstr = UIcmd_find_search_str(urlstr))) {
+      urlstr = search_urlstr;
+   }
    if (urlstr && *urlstr) {
       /* Filter URL string */
       new_urlstr = a_Url_string_strip_delimiters(urlstr);
@@ -686,6 +721,7 @@ void a_UIcmd_open_urlstr(void *vbw, const char *urlstr)
          a_Url_free(url);
       }
    }
+   dFree(search_urlstr);
 }
 
 /*

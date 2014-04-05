@@ -48,6 +48,7 @@ typedef struct {
    DilloUrl *start_page;
    DilloUrl *home;
    bool_t allow_white_bg;
+   int32_t white_bg_replacement;
    int32_t bg_color;
    int32_t ui_button_highlight_color;
    int32_t ui_fg_color;
@@ -60,6 +61,7 @@ typedef struct {
    int32_t ui_text_bg_color;
    bool_t contrast_visited_color;
    bool_t show_tooltip;
+   bool_t show_ui_tooltip;
    char *theme;
    int panel_size;
    bool_t small_icons;
@@ -79,12 +81,14 @@ typedef struct {
    bool_t show_tools;
    bool_t show_filemenu;
    bool_t show_clear_url;
+   bool_t show_url;
    bool_t show_search;
    bool_t show_help;
    bool_t show_progress_box;
    bool_t show_quit_dialog;
    bool_t fullwindow_start;
    bool_t load_images;
+   bool_t load_background_images;
    bool_t load_stylesheets;
    bool_t parse_embedded_css;
    int32_t buffered_drawing;
@@ -104,6 +108,7 @@ typedef struct {
    bool_t middle_click_drags_page;
    int penalty_hyphen, penalty_hyphen_2;
    int penalty_em_dash_left, penalty_em_dash_right, penalty_em_dash_right_2;
+   int stretchability_factor;
 } DilloPrefs;
 
 /* Global Data */

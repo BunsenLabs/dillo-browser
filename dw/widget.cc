@@ -32,10 +32,41 @@ namespace core {
 
 // ----------------------------------------------------------------------
 
+bool Widget::WidgetImgRenderer::readyToDraw ()
+{
+   return widget->wasAllocated ();
+}
+
+void Widget::WidgetImgRenderer::getBgArea (int *x, int *y, int *width,
+                                           int *height)
+{
+   widget->getPaddingArea (x, y, width, height);
+}
+
+void Widget::WidgetImgRenderer::getRefArea (int *xRef, int *yRef, int *widthRef,
+                                            int *heightRef)
+{
+   widget->getPaddingArea (xRef, yRef, widthRef, heightRef);
+}
+
+style::Style *Widget::WidgetImgRenderer::getStyle ()
+{
+   return widget->getStyle ();
+}
+
+void Widget::WidgetImgRenderer::draw (int x, int y, int width, int height)
+{
+   widget->queueDrawArea (x - widget->allocation.x, y - widget->allocation.y,
+                          width, height);
+}
+
+// ----------------------------------------------------------------------
+
 int Widget::CLASS_ID = -1;
 
 Widget::Widget ()
 {
+   DBG_OBJ_CREATE ("dw::core::Widget");
    registerName ("dw::core::Widget", &CLASS_ID);
 
    flags = (Flags)(NEEDS_RESIZE | EXTREMES_CHANGED | HAS_CONTENTS);
@@ -55,12 +86,20 @@ Widget::Widget ()
 
    deleteCallbackData = NULL;
    deleteCallbackFunc = NULL;
+
+   widgetImgRenderer = NULL;
 }
 
 Widget::~Widget ()
 {
    if (deleteCallbackFunc)
       deleteCallbackFunc (deleteCallbackData);
+
+   if (widgetImgRenderer) {
+      if (style && style->backgroundImage)
+         style->backgroundImage->removeExternalImgRenderer (widgetImgRenderer);
+      delete widgetImgRenderer;
+   }
 
    if (style)
       style->unref ();
@@ -69,6 +108,8 @@ Widget::~Widget ()
       parent->removeChild (this);
    else
       layout->removeWidget ();
+
+   DBG_OBJ_DELETE ();
 }
 
 
@@ -108,7 +149,8 @@ void Widget::setParent (Widget *parent)
    if (!buttonSensitiveSet)
       buttonSensitive = parent->buttonSensitive;
 
-   //DBG_OBJ_ASSOC (widget, parent);
+   DBG_OBJ_ASSOC_PARENT (parent);
+
    //printf ("The %s %p becomes a child of the %s %p\n",
    //        getClassName(), this, parent->getClassName(), parent);
 }
@@ -174,9 +216,9 @@ void Widget::sizeRequest (Requisition *requisition)
       this->requisition = *requisition;
       unsetFlags (NEEDS_RESIZE);
 
-      DBG_OBJ_SET_NUM (this, "requisition->width", requisition->width);
-      DBG_OBJ_SET_NUM (this, "requisition->ascent", requisition->ascent);
-      DBG_OBJ_SET_NUM (this, "requisition->descent", requisition->descent);
+      DBG_OBJ_SET_NUM ("requisition.width", requisition->width);
+      DBG_OBJ_SET_NUM ("requisition.ascent", requisition->ascent);
+      DBG_OBJ_SET_NUM ("requisition.descent", requisition->descent);
    } else
       *requisition = this->requisition;
 }
@@ -191,8 +233,8 @@ void Widget::getExtremes (Extremes *extremes)
       this->extremes = *extremes;
       unsetFlags (EXTREMES_CHANGED);
 
-      DBG_OBJ_SET_NUM (this, "extremes->minWidth", extremes->minWidth);
-      DBG_OBJ_SET_NUM (this, "extremes->maxWidth", extremes->maxWidth);
+      DBG_OBJ_SET_NUM ("extremes.minWidth", extremes->minWidth);
+      DBG_OBJ_SET_NUM ("extremes.maxWidth", extremes->maxWidth);
    } else
       *extremes = this->extremes;
 }
@@ -235,11 +277,11 @@ void Widget::sizeAllocate (Allocation *allocation)
 
       resizeDrawImpl ();
 
-      DBG_OBJ_SET_NUM (this, "allocation.x", this->allocation.x);
-      DBG_OBJ_SET_NUM (this, "allocation.y", this->allocation.y);
-      DBG_OBJ_SET_NUM (this, "allocation.width", this->allocation.width);
-      DBG_OBJ_SET_NUM (this, "allocation.ascent", this->allocation.ascent);
-      DBG_OBJ_SET_NUM (this, "allocation.descent", this->allocation.descent);
+      DBG_OBJ_SET_NUM ("allocation.x", this->allocation.x);
+      DBG_OBJ_SET_NUM ("allocation.y", this->allocation.y);
+      DBG_OBJ_SET_NUM ("allocation.width", this->allocation.width);
+      DBG_OBJ_SET_NUM ("allocation.ascent", this->allocation.ascent);
+      DBG_OBJ_SET_NUM ("allocation.descent", this->allocation.descent);
    }
 
    /*unsetFlags (NEEDS_RESIZE);*/
@@ -281,6 +323,10 @@ void Widget::setStyle (style::Style *style)
 {
    bool sizeChanged;
 
+   if (widgetImgRenderer && this->style && this->style->backgroundImage)
+      this->style->backgroundImage->removeExternalImgRenderer
+         (widgetImgRenderer);
+
    style->ref ();
 
    if (this->style) {
@@ -290,6 +336,17 @@ void Widget::setStyle (style::Style *style)
       sizeChanged = true;
 
    this->style = style;
+
+   DBG_OBJ_ASSOC_CHILD (style);
+
+   if (style && style->backgroundImage) {
+      // Create instance of WidgetImgRenderer when needed. Until this
+      // widget is deleted, "widgetImgRenderer" will be kept, since it
+      // is not specific to the style, but only to this widget.
+      if (widgetImgRenderer == NULL)
+         widgetImgRenderer = new WidgetImgRenderer (this);
+      style->backgroundImage->putExternalImgRenderer (widgetImgRenderer);
+   }
 
    if (layout != NULL) {
       layout->updateCursor ();
@@ -340,20 +397,31 @@ style::Color *Widget::getBgColor ()
 void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
                       int x, int y, int width, int height, bool inverse)
 {
-   Rectangle viewArea;
-   viewArea.x = area->x + allocation.x;
-   viewArea.y = area->y + allocation.y;
-   viewArea.width = area->width;
-   viewArea.height = area->height;
+   Rectangle canvasArea;
+   canvasArea.x = area->x + allocation.x;
+   canvasArea.y = area->y + allocation.y;
+   canvasArea.width = area->width;
+   canvasArea.height = area->height;
 
-   style::drawBorder (view, &viewArea, allocation.x + x, allocation.y + y,
+   style::drawBorder (view, layout, &canvasArea,
+                      allocation.x + x, allocation.y + y,
                       width, height, style, inverse);
 
-   /** \todo Background images? */
-   if (style->backgroundColor)
-      style::drawBackground (view, &viewArea,
-                             allocation.x + x, allocation.y + y, width, height,
-                             style, inverse);
+   // This method is used for inline elements, where the CSS 2 specification
+   // does not define what here is called "reference area". To make it look
+   // smoothly, the widget padding box is used.
+
+   int xPad, yPad, widthPad, heightPad;
+   getPaddingArea (&xPad, &yPad, &widthPad, &heightPad);
+   style::drawBackground
+      (view, layout, &canvasArea,
+       allocation.x + x + style->margin.left + style->borderWidth.left,
+       allocation.y + y + style->margin.top + style->borderWidth.top,
+       width - style->margin.left - style->borderWidth.left
+       - style->margin.right - style->borderWidth.right,
+       height - style->margin.top - style->borderWidth.top
+       - style->margin.bottom - style->borderWidth.bottom,
+       xPad, yPad, widthPad, heightPad, style, inverse, false);
 }
 
 /**
@@ -364,32 +432,21 @@ void Widget::drawBox (View *view, style::Style *style, Rectangle *area,
  */
 void Widget::drawWidgetBox (View *view, Rectangle *area, bool inverse)
 {
-   Rectangle viewArea;
-   viewArea.x = area->x + allocation.x;
-   viewArea.y = area->y + allocation.y;
-   viewArea.width = area->width;
-   viewArea.height = area->height;
+   Rectangle canvasArea;
+   canvasArea.x = area->x + allocation.x;
+   canvasArea.y = area->y + allocation.y;
+   canvasArea.width = area->width;
+   canvasArea.height = area->height;
 
-   style::drawBorder (view, &viewArea, allocation.x, allocation.y,
+   style::drawBorder (view, layout, &canvasArea, allocation.x, allocation.y,
                       allocation.width, getHeight (), style, inverse);
 
-   /** \todo Adjust following comment from the old dw sources. */
-   /*
-    * - Toplevel widget background colors are set as viewport
-    *   background color. This is not crucial for the rendering, but
-    *   looks a bit nicer when scrolling. Furthermore, the viewport
-    *   does anything else in this case.
-    *
-    * - Since widgets are always drawn from top to bottom, it is
-    *   *not* necessary to draw the background if
-    *   widget->style->background_color is NULL (shining through).
-    */
-   /** \todo Background images? */
-
-   if (style->backgroundColor &&
-       (parent || layout->getBgColor () != style->backgroundColor))
-      style::drawBackground (view, &viewArea, allocation.x, allocation.y,
-                             allocation.width, getHeight (), style, inverse);
+   int xPad, yPad, widthPad, heightPad;
+   getPaddingArea (&xPad, &yPad, &widthPad, &heightPad);
+   style::drawBackground (view, layout, &canvasArea,
+                          xPad, yPad, widthPad, heightPad,
+                          xPad, yPad, widthPad, heightPad,
+                          style, inverse, parent == NULL);
 }
 
 /*
@@ -531,6 +588,23 @@ void Widget::scrollTo (HPosition hpos, VPosition vpos,
 {
    layout->scrollTo (hpos, vpos,
                      x + allocation.x, y + allocation.y, width, height);
+}
+
+/**
+ * \brief Return the padding area (content plus padding).
+ *
+ * Used as "reference area" (ee comment of "style::drawBackground")
+ * for backgrounds.
+ */
+void Widget::getPaddingArea (int *xPad, int *yPad, int *widthPad,
+                             int *heightPad)
+{
+   *xPad = allocation.x + style->margin.left + style->borderWidth.left;
+   *yPad = allocation.y + style->margin.top + style->borderWidth.top;
+   *widthPad = allocation.width - style->margin.left - style->borderWidth.left
+      - style->margin.right - style->borderWidth.right;
+   *heightPad = getHeight () -  style->margin.top - style->borderWidth.top
+      - style->margin.bottom - style->borderWidth.bottom;
 }
 
 void Widget::getExtremesImpl (Extremes *extremes)

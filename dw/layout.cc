@@ -32,6 +32,65 @@ using namespace lout::object;
 namespace dw {
 namespace core {
 
+bool Layout::LayoutImgRenderer::readyToDraw ()
+{
+   return true;
+}
+
+void Layout::LayoutImgRenderer::getBgArea (int *x, int *y, int *width,
+                                           int *height)
+{
+   // TODO Actually not padding area, but visible area?
+   getRefArea (x, y, width, height);
+}
+
+void Layout::LayoutImgRenderer::getRefArea (int *xRef, int *yRef, int *widthRef,
+                                            int *heightRef)
+{
+   *xRef = 0;
+   *yRef = 0;
+   *widthRef = misc::max (layout->viewportWidth
+                          - (layout->canvasHeightGreater ?
+                             layout->vScrollbarThickness : 0),
+                          layout->canvasWidth);
+   *heightRef = misc::max (layout->viewportHeight
+                           - layout->hScrollbarThickness,
+                           layout->canvasAscent + layout->canvasDescent);
+}
+
+style::StyleImage *Layout::LayoutImgRenderer::getBackgroundImage ()
+{
+   return layout->bgImage;
+}
+
+style::BackgroundRepeat Layout::LayoutImgRenderer::getBackgroundRepeat ()
+{
+   return layout->bgRepeat;
+}
+
+style::BackgroundAttachment
+   Layout::LayoutImgRenderer::getBackgroundAttachment ()
+{
+   return layout->bgAttachment;
+}
+
+style::Length Layout::LayoutImgRenderer::getBackgroundPositionX ()
+{
+   return layout->bgPositionX;
+}
+
+style::Length Layout::LayoutImgRenderer::getBackgroundPositionY ()
+{
+   return layout->bgPositionY;
+}
+
+void Layout::LayoutImgRenderer::draw (int x, int y, int width, int height)
+{
+   layout->queueDraw (x, y, width, height);
+}
+
+// ----------------------------------------------------------------------
+
 void Layout::Receiver::canvasSizeChanged (int width, int ascent, int descent)
 {
 }
@@ -186,9 +245,10 @@ Layout::Layout (Platform *platform)
    topLevel = NULL;
    widgetAtPoint = NULL;
 
-   DBG_OBJ_CREATE (this, "DwRenderLayout");
+   DBG_OBJ_CREATE ("dw::core::Layout");
 
    bgColor = NULL;
+   bgImage = NULL;
    cursor = style::CURSOR_DEFAULT;
 
    canvasWidth = canvasAscent = canvasDescent = 0;
@@ -210,17 +270,25 @@ Layout::Layout (Platform *platform)
 
    textZone = new misc::ZoneAllocator (16 * 1024);
 
-   DBG_OBJ_ASSOC (&findtextState, this);
-   DBG_OBJ_ASSOC (&selectionState, this);
+   DBG_OBJ_ASSOC_CHILD (&findtextState);
+   DBG_OBJ_ASSOC_CHILD (&selectionState);
 
    platform->setLayout (this);
 
    selectionState.setLayout(this);
+
+   layoutImgRenderer = NULL;
 }
 
 Layout::~Layout ()
 {
    widgetAtPoint = NULL;
+
+   if (layoutImgRenderer) {
+      if (bgImage)
+         bgImage->removeExternalImgRenderer (layoutImgRenderer);
+      delete layoutImgRenderer;
+   }
 
    if (scrollIdleId != -1)
       platform->removeIdle (scrollIdleId);
@@ -228,6 +296,8 @@ Layout::~Layout ()
       platform->removeIdle (resizeIdleId);
    if (bgColor)
       bgColor->unref ();
+   if (bgImage)
+      bgImage->unref ();
    if (topLevel) {
       Widget *w = topLevel;
       topLevel = NULL;
@@ -237,6 +307,8 @@ Layout::~Layout ()
    delete view;
    delete anchorsTable;
    delete textZone;
+
+   DBG_OBJ_DELETE ();
 }
 
 void Layout::addWidget (Widget *widget)
@@ -284,6 +356,8 @@ void Layout::removeWidget ()
 
 void Layout::setWidget (Widget *widget)
 {
+   DBG_OBJ_ASSOC_CHILD (widget);
+
    widgetAtPoint = NULL;
    if (topLevel) {
       Widget *w = topLevel;
@@ -306,6 +380,8 @@ void Layout::attachView (View *view)
 {
    if (this->view)
       MSG_ERR("attachView: Multiple views for layout!\n");
+
+   DBG_OBJ_ASSOC_CHILD (view);
 
    this->view = view;
    platform->attachView (view);
@@ -508,6 +584,23 @@ void Layout::draw (View *view, Rectangle *area)
 {
    Rectangle widgetArea, intersection, widgetDrawArea;
 
+   // First of all, draw background image. (Unlike background *color*,
+   // this is not a feature of the views.)
+   if (bgImage != NULL && bgImage->getImgbufSrc() != NULL)
+      style::drawBackgroundImage (view, bgImage, bgRepeat, bgAttachment,
+                                  bgPositionX, bgPositionY,
+                                  area->x, area->y, area->width,
+                                  area->height, 0, 0,
+                                  // Reference area: maximum of canvas size and
+                                  // viewport size.
+                                  misc::max (viewportWidth
+                                             - (canvasHeightGreater ?
+                                                vScrollbarThickness : 0),
+                                             canvasWidth),
+                                  misc::max (viewportHeight
+                                             - hScrollbarThickness,
+                                             canvasAscent + canvasDescent));
+
    if (scrollIdleId != -1) {
       /* scroll is pending, defer draw until after scrollIdle() */
       drawAfterScrollReq = true;
@@ -650,58 +743,88 @@ void Layout::setBgColor (style::Color *color)
       view->setBgColor (bgColor);
 }
 
+void Layout::setBgImage (style::StyleImage *bgImage,
+                         style::BackgroundRepeat bgRepeat,
+                         style::BackgroundAttachment bgAttachment,
+                         style::Length bgPositionX, style::Length bgPositionY)
+{
+   if (layoutImgRenderer && this->bgImage)
+      this->bgImage->removeExternalImgRenderer (layoutImgRenderer);
+
+   if (bgImage)
+      bgImage->ref ();
+
+   if (this->bgImage)
+      this->bgImage->unref ();
+
+   this->bgImage = bgImage;
+   this->bgRepeat = bgRepeat;
+   this->bgAttachment = bgAttachment;
+   this->bgPositionX = bgPositionX;
+   this->bgPositionY = bgPositionY;
+
+   if (bgImage) {
+      // Create instance of LayoutImgRenderer when needed. Until this
+      // layout is deleted, "layoutImgRenderer" will be kept, since it
+      // is not specific to the style, but only to this layout.
+      if (layoutImgRenderer == NULL)
+         layoutImgRenderer = new LayoutImgRenderer (this);
+      bgImage->putExternalImgRenderer (layoutImgRenderer);
+   }
+}
+
+
 void Layout::resizeIdle ()
 {
    //static int calls = 0;
    //MSG(" Layout::resizeIdle calls = %d\n", ++calls);
 
-   while (resizeIdleId != -1) {
-      // Reset already here, since in this function, queueResize() may be
-      // called again.
-      resizeIdleId = -1;
+   assert (resizeIdleId != -1);
 
-      if (topLevel) {
-         Requisition requisition;
-         Allocation allocation;
+   // Reset already here, since in this function, queueResize() may be
+   // called again.
+   resizeIdleId = -1;
 
-         topLevel->sizeRequest (&requisition);
+   if (topLevel) {
+      Requisition requisition;
+      Allocation allocation;
 
-         allocation.x = allocation.y = 0;
-         allocation.width = requisition.width;
-         allocation.ascent = requisition.ascent;
-         allocation.descent = requisition.descent;
-         topLevel->sizeAllocate (&allocation);
+      topLevel->sizeRequest (&requisition);
 
-         canvasWidth = requisition.width;
-         canvasAscent = requisition.ascent;
-         canvasDescent = requisition.descent;
+      allocation.x = allocation.y = 0;
+      allocation.width = requisition.width;
+      allocation.ascent = requisition.ascent;
+      allocation.descent = requisition.descent;
+      topLevel->sizeAllocate (&allocation);
 
-         emitter.emitCanvasSizeChanged (
-            canvasWidth, canvasAscent, canvasDescent);
+      canvasWidth = requisition.width;
+      canvasAscent = requisition.ascent;
+      canvasDescent = requisition.descent;
 
-         // Tell the view about the new world size.
-         view->setCanvasSize (canvasWidth, canvasAscent, canvasDescent);
-         //  view->queueDrawTotal (false);
+      emitter.emitCanvasSizeChanged (canvasWidth, canvasAscent, canvasDescent);
 
-         if (usesViewport) {
-            int currHThickness = currHScrollbarThickness();
-            int currVThickness = currVScrollbarThickness();
+      // Tell the view about the new world size.
+      view->setCanvasSize (canvasWidth, canvasAscent, canvasDescent);
+      //  view->queueDrawTotal (false);
 
-            if (!canvasHeightGreater &&
-               canvasAscent + canvasDescent
-               > viewportHeight - currHThickness) {
-               canvasHeightGreater = true;
-               setSizeHints ();
-               /* May queue a new resize. */
+      if (usesViewport) {
+         int currHThickness = currHScrollbarThickness();
+         int currVThickness = currVScrollbarThickness();
+
+         if (!canvasHeightGreater &&
+             canvasAscent + canvasDescent
+             > viewportHeight - currHThickness) {
+            canvasHeightGreater = true;
+            setSizeHints ();
+            /* May queue a new resize. */
             }
 
-            // Set viewport sizes.
-            view->setViewportSize (viewportWidth, viewportHeight,
-                                   currHThickness, currVThickness);
-         }
+         // Set viewport sizes.
+         view->setViewportSize (viewportWidth, viewportHeight,
+                                currHThickness, currVThickness);
       }
 
-     // views are redrawn via Widget::resizeDrawImpl ()
+      // views are redrawn via Widget::resizeDrawImpl ()
 
    }
 
