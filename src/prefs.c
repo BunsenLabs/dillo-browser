@@ -37,6 +37,7 @@ DilloPrefs prefs;
 void a_Prefs_init(void)
 {
    prefs.allow_white_bg = TRUE;
+   prefs.white_bg_replacement = 0xe0e0a3; // 0xdcd1ba;
    prefs.bg_color = 0xdcd1ba;
    prefs.buffered_drawing = 1;
    prefs.contrast_visited_color = TRUE;
@@ -67,6 +68,7 @@ void a_Prefs_init(void)
    prefs.http_user_agent = dStrdup(PREFS_HTTP_USER_AGENT);
    prefs.limit_text_width = FALSE;
    prefs.load_images=TRUE;
+   prefs.load_background_images=TRUE;
    prefs.load_stylesheets=TRUE;
    prefs.middle_click_drags_page = TRUE;
    prefs.middle_click_opens_new_tab = TRUE;
@@ -92,10 +94,12 @@ void a_Prefs_init(void)
    prefs.show_quit_dialog = TRUE;
    prefs.show_reload = TRUE;
    prefs.show_save = TRUE;
+   prefs.show_url = TRUE;
    prefs.show_search = TRUE;
    prefs.show_stop = TRUE;
    prefs.show_tools = TRUE;
    prefs.show_tooltip = TRUE;
+   prefs.show_ui_tooltip = TRUE;
    prefs.small_icons = FALSE;
    prefs.start_page = a_Url_new(PREFS_START_PAGE, NULL);
    prefs.theme = dStrdup(PREFS_THEME);
@@ -115,6 +119,7 @@ void a_Prefs_init(void)
    prefs.penalty_em_dash_left = 800;
    prefs.penalty_em_dash_right = 100;
    prefs.penalty_em_dash_right_2 = 800;
+   prefs.stretchability_factor = 100;
 }
 
 /*

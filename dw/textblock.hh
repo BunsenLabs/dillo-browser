@@ -237,13 +237,48 @@ private:
    static const char *hyphenDrawChar;
 
 protected:
+   /**
+    * \brief Implementation used for words.
+    */
+   class WordImgRenderer:
+      public core::style::StyleImage::ExternalWidgetImgRenderer
+   {
+   protected:
+      Textblock *textblock;
+      int wordNo, xWordWidget, lineNo;
+      bool dataSet;
+
+   public:
+      WordImgRenderer (Textblock *textblock, int wordNo);
+      ~WordImgRenderer ();
+      
+      void setData (int xWordWidget, int lineNo);
+
+      bool readyToDraw ();
+      void getBgArea (int *x, int *y, int *width, int *height);
+      void getRefArea (int *xRef, int *yRef, int *widthRef, int *heightRef);
+      core::style::Style *getStyle ();
+      void draw (int x, int y, int width, int height);
+
+      virtual void print ();
+   };
+
+   class SpaceImgRenderer: public WordImgRenderer
+   {
+   public:
+      inline SpaceImgRenderer (Textblock *textblock, int wordNo) :
+         WordImgRenderer (textblock, wordNo) { }
+
+      void getBgArea (int *x, int *y, int *width, int *height);
+      core::style::Style *getStyle ();
+
+      void print ();
+   };
+
    struct Paragraph
    {
       int firstWord;    /* first word's index in word vector */
       int lastWord;     /* last word's index in word vector */
-
-      // TODO Adjust comments. Short note: maxParMin/maxParMax is
-      // is never smaller than parMin/parMax.
 
       /*
        * General remark: all values include the last hyphen width, but
@@ -256,15 +291,16 @@ protected:
        */
 
       int parMin;       /* The sum of all word minima (plus spaces,
-                           hyphen width etc.) of the last c  */
+                           hyphen width etc.) since the last possible
+                           break within this paragraph. */
       int parMax;       /* The sum of all word maxima in this
                          * paragraph (plus spaces, hyphen width
                          * etc.). */
 
-      int maxParMin;    /* Maximum of all paragraph minima, including
-                         * this line. */
-      int maxParMax;    /* Maximum of all paragraph maxima (value of "parMax"),
-                         * including this one. */
+      int maxParMin;    /* Maximum of all paragraph minima (value of
+                         * "parMin), including this paragraph. */
+      int maxParMax;    /* Maximum of all paragraph maxima (value of
+                         * "parMax"), including this paragraph. */
    };
 
    struct Line
@@ -343,14 +379,20 @@ protected:
                                   words: the value compared to the
                                   ideal width of the line, if the line
                                   would be broken after this word. */
-      int totalStretchability; // includes all *before* current word
-      int totalShrinkability;  // includes all *before* current word
+      int maxAscent, maxDescent;
+      int totalSpaceStretchability; // includes all *before* current word
+      int totalSpaceShrinkability;  // includes all *before* current word
       BadnessAndPenalty badnessAndPenalty; /* when line is broken after this
                                             * word */
 
       core::style::Style *style;
       core::style::Style *spaceStyle; /* initially the same as of the word,
                                          later set by a_Dw_page_add_space */
+
+      // These two are used rarely, so there is perhaps a way to store
+      // them which is consuming less memory.
+      WordImgRenderer *wordImgRenderer;
+      SpaceImgRenderer *spaceImgRenderer;
    };
 
    void printWordShort (Word *word);
@@ -424,6 +466,11 @@ protected:
     */
    static int penalties[PENALTY_NUM][2];
 
+   /**
+    * ...
+    */
+   static int stretchabilityFactor;
+
    bool limitTextWidth; /* from preferences */
 
    int redrawY;
@@ -479,11 +526,17 @@ protected:
 
    Word *addWord (int width, int ascent, int descent, short flags,
                   core::style::Style *style);
-   void fillWord (Word *word, int width, int ascent, int descent,
+   void initWord (int wordNo);
+   void removeWordImgRenderer (int wordNo);
+   void setWordImgRenderer (int wordNo);
+   void removeSpaceImgRenderer (int wordNo);
+   void setSpaceImgRenderer (int wordNo);
+   void fillWord (int wordNo, int width, int ascent, int descent,
                   short flags, core::style::Style *style);
-   void fillSpace (Word *word, core::style::Style *style);
+   void fillSpace (int wordNo, core::style::Style *style);
    void setBreakOption (Word *word, core::style::Style *style,
-                        int breakPenalty1, int breakPenalty2);
+                        int breakPenalty1, int breakPenalty2, bool forceBreak);
+   bool isBreakAllowed (Word *word);
    int textWidth (const char *text, int start, int len,
                   core::style::Style *style, bool isStart, bool isEnd);
    void calcTextSize (const char *text, size_t len, core::style::Style *style,
@@ -565,12 +618,19 @@ protected:
    void accumulateWordExtremes (int firstWord, int lastWord,
                                 int *maxOfMinWidth, int *sumOfMaxWidth);
    void processWord (int wordIndex);
-   virtual void wordWrap (int wordIndex, bool wrapAll);
+   virtual bool wordWrap (int wordIndex, bool wrapAll);
+   int searchMinBap (int firstWord, int lastWordm, int penaltyIndex,
+                     bool correctAtEnd);
+   int considerHyphenation (int firstIndex, int breakPos);
+   bool isHyphenationCandidate (Word *word);
+
    void handleWordExtremes (int wordIndex);
    void correctLastWordExtremes ();
 
-   static int getShrinkability(struct Word *word);
-   static int getStretchability(struct Word *word);
+   static int getSpaceShrinkability(struct Word *word);
+   static int getSpaceStretchability(struct Word *word);
+   static int getLineShrinkability(Word *lastWord);
+   static int getLineStretchability(Word *lastWord);
    int hyphenateWord (int wordIndex);
    void accumulateWordForLine (int lineIndex, int wordIndex);
    void accumulateWordData (int wordIndex);
@@ -613,6 +673,7 @@ public:
    static void setPenaltyEmDashLeft (int penaltyLeftEmDash);
    static void setPenaltyEmDashRight (int penaltyRightEmDash);
    static void setPenaltyEmDashRight2 (int penaltyRightEmDash2);
+   static void setStretchabilityFactor (int stretchabilityFactor);
 
    Textblock(bool limitTextWidth);
    ~Textblock();
@@ -629,7 +690,7 @@ public:
    void addWidget (core::Widget *widget, core::style::Style *style);
    bool addAnchor (const char *name, core::style::Style *style);
    void addSpace (core::style::Style *style);
-   void addBreakOption (core::style::Style *style);
+   void addBreakOption (core::style::Style *style, bool forceBreak);
    void addParbreak (int space, core::style::Style *style);
    void addLinebreak (core::style::Style *style);
 

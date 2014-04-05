@@ -1,7 +1,7 @@
 /*
  * Dillo Widget
  *
- * Copyright 2012-2013 Sebastian Geerken <sgeerken@dillo.org>, 
+ * Copyright 2012-2013 Sebastian Geerken <sgeerken@dillo.org>,
  *                     Johannes Hofmann <Johannes.Hofmann@gmx.de>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -49,9 +49,11 @@ Hyphenator::Hyphenator (const char *patFile, const char *excFile, int pack)
 {
    trie = NULL; // As long we are not sure whether a pattern file can be read.
 
-   char buf[PATH_MAX + 1];
-   snprintf(buf, sizeof (buf), "%s.trie", patFile);
+   int bufLen = strlen (patFile) + 5 + 1;
+   char *buf = new char[bufLen];
+   snprintf(buf, bufLen, "%s.trie", patFile);
    FILE *trieF = fopen (buf, "r");
+   delete[] buf;
 
    if (trieF) {
       trie = new Trie ();
@@ -118,11 +120,13 @@ Hyphenator *Hyphenator::getHyphenator (const char *lang)
    if (hyphenator)
       delete langString;
    else {
-      char patFile [PATH_MAX];
-      snprintf (patFile, sizeof (patFile), "%s/hyphenation/%s.pat",
+      int patFileLen = strlen (DILLO_LIBDIR) + 13 + strlen (lang) + 4 + 1;
+      char *patFile = new char[patFileLen];
+      snprintf (patFile, patFileLen, "%s/hyphenation/%s.pat",
                 DILLO_LIBDIR, lang);
-      char excFile [PATH_MAX];
-      snprintf (excFile, sizeof(excFile), "%s/hyphenation/%s.exc",
+      int excFileLen = strlen (DILLO_LIBDIR) + 13 + strlen (lang) + 4 + 1;
+      char *excFile = new char[excFileLen];
+      snprintf (excFile, excFileLen, "%s/hyphenation/%s.exc",
                 DILLO_LIBDIR, lang);
 
       //printf ("Loading hyphenation patterns for language '%s' from '%s' and "
@@ -130,6 +134,8 @@ Hyphenator *Hyphenator::getHyphenator (const char *lang)
 
       hyphenator = new Hyphenator (patFile, excFile);
       hyphenators->put (langString, hyphenator);
+      delete[] patFile;
+      delete[] excFile;
    }
 
    //lout::misc::StringBuffer sb;
@@ -144,7 +150,7 @@ void Hyphenator::insertPattern (TrieBuilder *trieBuilder, char *s)
    // Convert the a pattern like 'a1bc3d4' into a string of chars 'abcd'
    // and a list of points [ 0, 1, 0, 3, 4 ].
    int l = strlen (s);
-   char chars [l + 1];
+   char *chars = new char[l + 1];
    SimpleVector<char> points (1);
 
    // TODO numbers consisting of multiple digits?
@@ -171,6 +177,7 @@ void Hyphenator::insertPattern (TrieBuilder *trieBuilder, char *s)
    //printf("insertPattern %s\n", chars);
 
    trieBuilder->insert (chars, points.getArray ());
+   delete[] chars;
 }
 
 void Hyphenator::insertException (char *s)
@@ -182,7 +189,7 @@ void Hyphenator::insertException (char *s)
       if((unsigned char)s[i] == 0xc2 && (unsigned char)s[i + 1] == 0xad)
          breaks->put (new Integer (i - 2 * breaks->size()));
 
-   char noHyphens[len - 2 * breaks->size() + 1];
+   char *noHyphens = new char[len - 2 * breaks->size() + 1];
    int j = 0;
    for (int i = 0; i < len; ) {
       if(i < len - 1 &&
@@ -194,6 +201,7 @@ void Hyphenator::insertException (char *s)
    noHyphens[j] = 0;
 
    exceptions->put (new String (noHyphens), breaks);
+   delete[] noHyphens;
 }
 
 /**
@@ -253,7 +261,7 @@ int *Hyphenator::hyphenateWord(core::Platform *platform,
    while (true) {
       while (wordLc[start] && !isCharPartOfActualWord (wordLc + start))
          start = platform->nextGlyph (wordLc, start);
-      
+
       if (wordLc[start] == 0)
          break;
 
@@ -313,7 +321,7 @@ void Hyphenator::hyphenateSingleWord(core::Platform *platform,
    if (trie == NULL)
       return;
 
-   char work[strlen (wordLc) + 3];
+   char *work = new char[strlen (wordLc) + 3];
    strcpy (work, ".");
    strcat (work, wordLc);
    strcat (work, ".");
@@ -335,6 +343,8 @@ void Hyphenator::hyphenateSingleWord(core::Platform *platform,
          }
       }
    }
+
+   delete[] work;
 
    // No hyphens in the first two chars or the last two.
    // Characters are not bytes, so UTF-8 characters must be counted.

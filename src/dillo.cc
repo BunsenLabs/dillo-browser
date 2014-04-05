@@ -21,8 +21,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <locale.h>
+#include <errno.h>
 
 #include <FL/Fl.H>
 #include <FL/Fl_Window.H>
@@ -49,7 +52,9 @@
 #include "cookies.h"
 #include "domain.h"
 #include "auth.h"
+#include "styleengine.hh"
 
+#include "lout/debug.hh"
 #include "dw/fltkcore.hh"
 #include "dw/textblock.hh"
 
@@ -94,6 +99,63 @@ static const CLI_options Options[] = {
     "                         window whose window ID is XID."},
    {NULL, NULL, 0, DILLO_CLI_NONE, NULL}
 };
+
+
+/*
+ * SIGCHLD handling ----------------------------------------------------------
+ */
+
+/*
+ * Avoid our children (Dpid) to become zombies. :-)
+ * Notes:
+ *   . We let sigaction block SIGCHLD while in the handler.
+ *   . Portability is not simple. e.g.
+ *       http://www.faqs.org/faqs/unix-faq/faq/part3/section-13.html
+ *       man sigaction, waitpid
+ */
+static void raw_sigchld2(int signum)
+{
+   pid_t pid;
+   int status;
+
+   while (1) {
+      pid = waitpid(-1, &status, WNOHANG);
+      if (pid > 0) {
+         if (WIFEXITED(status))        /* normal exit */
+            printf("[dpid]: terminated normally (%d)\n", WEXITSTATUS(status));
+         else if (WIFSIGNALED(status)) /* terminated by signal */
+            printf("[dpid]: terminated by signal %d\n", WTERMSIG(status));
+      } else if (pid == 0 || errno == ECHILD) {
+         break;
+      } else {
+         if (errno == EINTR)
+            continue;
+         perror("waitpid");
+         break;
+      }
+   }
+   ++signum; /* compiler happiness */
+}
+
+/*
+ * Establish SIGCHLD handler
+ */
+static void est_sigchld(void)
+{
+   struct sigaction sigact;
+   sigset_t set;
+
+   (void) sigemptyset(&set);
+   sigact.sa_handler = raw_sigchld2; /* our custom handler */
+   sigact.sa_mask = set;             /* no aditional signal blocks */
+   sigact.sa_flags = SA_NOCLDSTOP;   /* ignore stop/resume states */
+   if (sigaction(SIGCHLD, &sigact, NULL) == -1) {
+      perror("sigaction");
+      exit(1);
+   }
+}
+
+//----------------------------------------------------------------------------
 
 /*
  * Print help text generated from the options structure
@@ -277,7 +339,7 @@ static void setColors()
    setUIColorWdef(PREFS_UI_TAB_ACTIVE_FG_COLOR, prefs.ui_tab_active_fg_color,
                   Fl::get_color(FL_FOREGROUND_COLOR));
    setUIColorWdef(PREFS_UI_TAB_FG_COLOR, prefs.ui_tab_fg_color,
-                  Fl::get_color(FL_FOREGROUND_COLOR));   
+                  Fl::get_color(FL_FOREGROUND_COLOR));
 }
 
 /*
@@ -315,6 +377,11 @@ static DilloUrl *makeStartUrl(char *str, bool local)
  */
 int main(int argc, char **argv)
 {
+   DBG_OBJ_COLOR("#c0ff80", "dw::*");
+   DBG_OBJ_COLOR("#c0c0ff", "dw::fltk::*");
+   DBG_OBJ_COLOR("#ffa0a0", "dw::core::*");
+   DBG_OBJ_COLOR("#ffe0a0", "dw::core::style::*");
+
    uint_t opt_id;
    uint_t options_got = 0;
    uint32_t xid = 0;
@@ -329,6 +396,8 @@ int main(int argc, char **argv)
 
    // Some OSes exit dillo without this (not GNU/Linux).
    signal(SIGPIPE, SIG_IGN);
+   // Establish our custom SIGCHLD handler
+   est_sigchld();
 
    /* Handle command line options */
    opt_argv = dNew0(char*, numOptions(Options) + 1);
@@ -404,12 +473,14 @@ int main(int argc, char **argv)
    a_Cookies_init();
    a_Auth_init();
    a_UIcmd_init();
+   StyleEngine::init();
 
    dw::Textblock::setPenaltyHyphen (prefs.penalty_hyphen);
    dw::Textblock::setPenaltyHyphen2 (prefs.penalty_hyphen_2);
    dw::Textblock::setPenaltyEmDashLeft (prefs.penalty_em_dash_left);
    dw::Textblock::setPenaltyEmDashRight (prefs.penalty_em_dash_right);
    dw::Textblock::setPenaltyEmDashRight2 (prefs.penalty_em_dash_right_2);
+   dw::Textblock::setStretchabilityFactor (prefs.stretchability_factor);
 
    /* command line options override preferences */
    if (options_got & DILLO_CLI_FULLWINDOW)
@@ -427,8 +498,7 @@ int main(int argc, char **argv)
    Fl::scheme(prefs.theme);
    setColors();
 
-   if (!prefs.show_tooltip) {
-      // turn off UI tooltips
+   if (!prefs.show_ui_tooltip) {
       Fl::option(Fl::OPTION_SHOW_TOOLTIPS, false);
    }
 
@@ -516,6 +586,8 @@ int main(int argc, char **argv)
    a_Prefs_freeall();
    Keys::free();
    Paths::free();
+   dw::core::freeall();
+   dw::fltk::freeall();
    /* TODO: auth, css */
 
    //a_Dpi_dillo_exit();

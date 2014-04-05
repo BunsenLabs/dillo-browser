@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 #include "../lout/msg.h"
+#include "../lout/debug.hh"
 #include "fltkcore.hh"
 
 #include <FL/fl_draw.H>
@@ -454,6 +455,8 @@ core::ui::RadioButtonResource
 
 FltkPlatform::FltkPlatform ()
 {
+   DBG_OBJ_CREATE ("dw::fltk::FltkPlatform");
+
    layout = NULL;
    idleQueue = new container::typed::List <IdleFunc> (true);
    idleFuncRunning = false;
@@ -471,11 +474,14 @@ FltkPlatform::~FltkPlatform ()
       Fl::remove_idle (generalStaticIdle, (void*)this);
    delete idleQueue;
    delete resources;
+
+   DBG_OBJ_DELETE ();
 }
 
 void FltkPlatform::setLayout (core::Layout *layout)
 {
    this->layout = layout;
+   DBG_OBJ_ASSOC_CHILD (layout);
 }
 
 
@@ -704,9 +710,9 @@ void FltkPlatform::copySelection(const char *text)
 }
 
 core::Imgbuf *FltkPlatform::createImgbuf (core::Imgbuf::Type type,
-                                          int width, int height)
+                                          int width, int height, double gamma)
 {
-   return new FltkImgbuf (type, width, height);
+   return new FltkImgbuf (type, width, height, gamma);
 }
 
 core::ui::ResourceFactory *FltkPlatform::getResourceFactory ()

@@ -20,6 +20,7 @@
 
 
 #include "core.hh"
+#include "../lout/debug.hh"
 #include "../lout/msg.h"
 
 namespace dw {
@@ -27,6 +28,8 @@ namespace core {
 
 FindtextState::FindtextState ()
 {
+   DBG_OBJ_CREATE ("dw::core::FindtextState");
+
    key = NULL;
    nexttab = NULL;
    widget = NULL;
@@ -44,6 +47,8 @@ FindtextState::~FindtextState ()
       delete iterator;
    if (hlIterator)
       delete hlIterator;
+
+   DBG_OBJ_DELETE ();
 }
 
 void FindtextState::setWidget (Widget *widget)

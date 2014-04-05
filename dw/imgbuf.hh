@@ -5,6 +5,8 @@
 #   error Do not include this file directly, use "core.hh" instead.
 #endif
 
+#include "../lout/debug.hh"
+
 namespace dw {
 namespace core {
 
@@ -161,6 +163,12 @@ class Imgbuf: public lout::object::Object, public lout::signal::ObservedObject
 public:
    enum Type { RGB, RGBA, GRAY, INDEXED, INDEXED_ALPHA };
 
+   inline Imgbuf () {
+      DBG_OBJ_CREATE ("dw::core::Imgbuf");
+      DBG_OBJ_BASECLASS (lout::object::Object);
+      DBG_OBJ_BASECLASS (lout::signal::ObservedObject);
+   }
+
    /*
     * Methods called from the image decoding
     */
@@ -177,6 +185,19 @@ public:
    virtual void getRowArea (int row, dw::core::Rectangle *area) = 0;
    virtual int getRootWidth () = 0;
    virtual int getRootHeight () = 0;
+
+
+   /**
+    * Creates an image buffer with same parameters (type, gamma etc.)
+    * except size.
+    */
+   virtual Imgbuf *createSimilarBuf (int width, int height) = 0;
+
+   /**
+    * Copies another image buffer into this image buffer.
+    */
+   virtual void copyTo (Imgbuf *dest, int xDestRoot, int yDestRoot,
+                        int xSrc, int ySrc, int widthSrc, int heightSrc) = 0;
 
    /*
     * Reference counting.

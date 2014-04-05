@@ -20,6 +20,7 @@
 
 
 #include "core.hh"
+#include "../lout/debug.hh"
 
 #include <stdio.h>
 
@@ -34,6 +35,7 @@ int Embed::CLASS_ID = -1;
 
 Embed::Embed(Resource *resource)
 {
+   DBG_OBJ_CREATE ("dw::core::ui::Embed");
    registerName ("dw::core::ui::Embed", &CLASS_ID);
    this->resource = resource;
    resource->setEmbed (this);
@@ -42,6 +44,7 @@ Embed::Embed(Resource *resource)
 Embed::~Embed()
 {
    delete resource;
+   DBG_OBJ_DELETE ();
 }
 
 void Embed::sizeRequestImpl (Requisition *requisition)

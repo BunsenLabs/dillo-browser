@@ -36,7 +36,6 @@ using namespace dw::core::ui;
 
 class DilloHtmlReceiver;
 class DilloHtmlSelect;
-class DilloHtmlOption;
 
 static Embed *Html_input_image(DilloHtml *html, const char *tag, int tagsize);
 
@@ -166,29 +165,64 @@ public:
    void setEnabled(bool enabled) {if (embed) embed->setEnabled(enabled); };
 };
 
+class DilloHtmlOptbase
+{
+public:
+   virtual ~DilloHtmlOptbase () {};
+   virtual bool isSelected() {return false;}
+   virtual bool select() {return false;}
+   virtual const char *getValue() {return NULL;}
+   virtual void setContent(const char *str, int len)
+      {MSG_ERR("Form: Optbase setContent()\n");}
+   virtual void addSelf(SelectionResource *res) = 0;
+};
+
+class DilloHtmlOptgroup : public DilloHtmlOptbase {
+private:
+   char *label;
+   bool enabled;
+public:
+   DilloHtmlOptgroup (char *label, bool enabled);
+   virtual ~DilloHtmlOptgroup ();
+   void addSelf (SelectionResource *res)
+      {res->pushGroup(label, enabled);}
+};
+
+class DilloHtmlOptgroupClose : public DilloHtmlOptbase {
+public:
+   virtual ~DilloHtmlOptgroupClose () {};
+   void addSelf (SelectionResource *res)
+      {res->popGroup();}
+};
+
+class DilloHtmlOption : public DilloHtmlOptbase {
+   friend class DilloHtmlSelect;
+public:
+   char *value, *label, *content;
+   bool selected, enabled;
+   DilloHtmlOption (char *value, char *label, bool selected, bool enabled);
+   virtual ~DilloHtmlOption ();
+   bool isSelected() {return selected;}
+   bool select() {return (selected = true);}
+   const char *getValue() {return value ? value : content;}
+   void setContent(const char *str, int len) {content = dStrndup(str, len);}
+   void addSelf (SelectionResource *res)
+      {res->addItem(label ? label : content, enabled, selected);}
+};
+
 class DilloHtmlSelect {
    friend class DilloHtmlInput;
 private:
-   lout::misc::SimpleVector<DilloHtmlOption *> *options;
+   lout::misc::SimpleVector<DilloHtmlOptbase *> *opts;
    DilloHtmlSelect ();
    ~DilloHtmlSelect ();
 public:
-   DilloHtmlOption *getCurrentOption ();
-   void addOption (char *value, bool selected, bool enabled);
+   DilloHtmlOptbase *getCurrentOpt ();
+   void addOpt (DilloHtmlOptbase *opt);
    void ensureSelection ();
-   void addOptionsTo (SelectionResource *res);
+   void addOptsTo (SelectionResource *res);
    void reset (SelectionResource *res);
    void appendValuesTo (Dlist *values, SelectionResource *res);
-};
-
-class DilloHtmlOption {
-   friend class DilloHtmlSelect;
-public:
-   char *value, *content;
-   bool selected, enabled;
-private:
-   DilloHtmlOption (char *value, bool selected, bool enabled);
-   ~DilloHtmlOption ();
 };
 
 /*
@@ -306,7 +340,7 @@ void Html_tag_open_form(DilloHtml *html, const char *tag, int tagsize)
    char *charset, *first;
    const char *attrbuf;
 
-   HT2TB(html)->addParbreak (9, html->styleEngine->wordStyle ());
+   HT2TB(html)->addParbreak (9, html->wordStyle ());
 
    if (html->InFlags & IN_FORM) {
       BUG_MSG("nested forms\n");
@@ -328,7 +362,8 @@ void Html_tag_open_form(DilloHtml *html, const char *tag, int tagsize)
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "action")))
       action = a_Html_url_new(html, attrbuf, NULL, 0);
    else {
-      BUG_MSG("action attribute is required for <form>\n");
+      if (html->DocType != DT_HTML || html->DocTypeVersion <= 4.01f)
+         BUG_MSG("action attribute is required for <form>\n");
       action = a_Url_dup(html->base_url);
    }
    content_type = DILLO_HTML_ENC_URLENCODED;
@@ -496,8 +531,6 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
    } else {
       /* Text input, which also is the default */
       inp_type = DILLO_HTML_INPUT_TEXT;
-      if (*type && dStrAsciiCasecmp(type, "text"))
-         BUG_MSG("Unknown input type: \"%s\"\n", type);
       attrbuf = a_Html_get_attr(html, tag, tagsize, "size");
       int size = Html_input_get_size(html, attrbuf);
       resource = factory->createEntryResource(size, false, NULL);
@@ -534,7 +567,7 @@ void Html_tag_open_input(DilloHtml *html, const char *tag, int tagsize)
          html->styleEngine->setNonCssHint (PROPERTY_X_TOOLTIP, CSS_TYPE_STRING,
                                            attrbuf);
       }
-      HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle());
+      HT2TB(html)->addWidget (embed, html->backgroundStyle());
    }
    dFree(type);
    dFree(name);
@@ -567,17 +600,17 @@ void Html_tag_open_isindex(DilloHtml *html, const char *tag, int tagsize)
                  html->charset);
    html->InFlags |= IN_FORM;
 
-   HT2TB(html)->addParbreak (9, html->styleEngine->wordStyle ());
+   HT2TB(html)->addParbreak (9, html->wordStyle ());
 
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "prompt")))
-      HT2TB(html)->addText(attrbuf, html->styleEngine->wordStyle ());
+      HT2TB(html)->addText(attrbuf, html->wordStyle ());
 
    ResourceFactory *factory = HT2LT(html)->getResourceFactory();
    EntryResource *entryResource = factory->createEntryResource (20,false,NULL);
    embed = new Embed (entryResource);
    Html_add_input(html, DILLO_HTML_INPUT_INDEX, embed, NULL, NULL, FALSE);
 
-   HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle ());
+   HT2TB(html)->addWidget (embed, html->backgroundStyle ());
 
    a_Url_free(action);
    html->InFlags &= ~IN_FORM;
@@ -585,15 +618,7 @@ void Html_tag_open_isindex(DilloHtml *html, const char *tag, int tagsize)
 
 void Html_tag_open_textarea(DilloHtml *html, const char *tag, int tagsize)
 {
-   if (html->InFlags & IN_TEXTAREA) {
-      BUG_MSG("nested <textarea>\n");
-      html->ReqTagClose = TRUE;
-      return;
-   }
-   if (html->InFlags & IN_SELECT) {
-      BUG_MSG("<textarea> element inside <select>\n");
-      return;
-   }
+   assert((html->InFlags & (IN_BUTTON | IN_SELECT | IN_TEXTAREA)) == 0);
 
    html->InFlags |= IN_TEXTAREA;
 }
@@ -615,7 +640,8 @@ void Html_tag_content_textarea(DilloHtml *html, const char *tag, int tagsize)
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "cols"))) {
       cols = strtol(attrbuf, NULL, 10);
    } else {
-      BUG_MSG("cols attribute is required for <textarea>\n");
+      if (html->DocType != DT_HTML || html->DocTypeVersion <= 4.01f)
+         BUG_MSG("cols attribute is required for <textarea>\n");
       cols = 20;
    }
    if (cols < 1 || cols > MAX_COLS) {
@@ -626,7 +652,8 @@ void Html_tag_content_textarea(DilloHtml *html, const char *tag, int tagsize)
    if ((attrbuf = a_Html_get_attr(html, tag, tagsize, "rows"))) {
       rows = strtol(attrbuf, NULL, 10);
    } else {
-      BUG_MSG("rows attribute is required for <textarea>\n");
+      if (html->DocType != DT_HTML || html->DocTypeVersion <= 4.01f)
+         BUG_MSG("rows attribute is required for <textarea>\n");
       rows = 10;
    }
    if (rows < 1 || rows > MAX_ROWS) {
@@ -648,7 +675,7 @@ void Html_tag_content_textarea(DilloHtml *html, const char *tag, int tagsize)
       textres->setEditable(false);
    Html_add_input(html, DILLO_HTML_INPUT_TEXTAREA, embed, name, NULL, false);
 
-   HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle ());
+   HT2TB(html)->addWidget (embed, html->backgroundStyle ());
    dFree(name);
 }
 
@@ -688,8 +715,8 @@ void Html_tag_close_textarea(DilloHtml *html)
          ((MultiLineTextResource *)input->embed->getResource ())->setText(str);
       }
 
-      html->InFlags &= ~IN_TEXTAREA;
    }
+   html->InFlags &= ~IN_TEXTAREA;
 }
 
 /*
@@ -701,10 +728,8 @@ void Html_tag_open_select(DilloHtml *html, const char *tag, int tagsize)
    const char *attrbuf;
    int rows = 0;
 
-   if (html->InFlags & IN_SELECT) {
-      BUG_MSG("nested <select>\n");
-      return;
-   }
+   assert((html->InFlags & (IN_BUTTON | IN_SELECT | IN_TEXTAREA)) == 0);
+
    html->InFlags |= IN_SELECT;
    html->InFlags &= ~IN_OPTION;
 
@@ -741,7 +766,7 @@ void Html_tag_open_select(DilloHtml *html, const char *tag, int tagsize)
       html->styleEngine->setNonCssHint (PROPERTY_X_TOOLTIP, CSS_TYPE_STRING,
                                         attrbuf);
    }
-   HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle ());
+   HT2TB(html)->addWidget (embed, html->backgroundStyle ());
 
    Html_add_input(html, type, embed, name, NULL, false);
    a_Html_stash_init(html);
@@ -760,14 +785,71 @@ void Html_tag_close_select(DilloHtml *html)
       html->InFlags &= ~IN_OPTION;
 
       DilloHtmlInput *input = Html_get_current_input(html);
-      DilloHtmlSelect *select = input->select;
-
-      if (input->type == DILLO_HTML_INPUT_SELECT) {
-         // option menu interface requires that something be selected */
-         select->ensureSelection ();
+      if (input) {
+         DilloHtmlSelect *select = input->select;
+         if (input->type == DILLO_HTML_INPUT_SELECT) {
+            // option menu interface requires that something be selected */
+            select->ensureSelection ();
+         }
+         select->addOptsTo ((SelectionResource*)input->embed->getResource());
       }
-      SelectionResource *res = (SelectionResource*)input->embed->getResource();
-      select->addOptionsTo (res);
+   }
+}
+
+void Html_tag_open_optgroup(DilloHtml *html, const char *tag, int tagsize)
+{
+   if (!(html->InFlags & IN_SELECT)) {
+      BUG_MSG("<optgroup> element outside <select>\n");
+      return;
+   }
+   if (html->InFlags & IN_OPTGROUP) {
+      BUG_MSG("nested <optgroup>\n");
+      return;
+   }
+   if (html->InFlags & IN_OPTION) {
+      Html_option_finish(html);
+      html->InFlags &= ~IN_OPTION;
+   }
+
+   html->InFlags |= IN_OPTGROUP;
+
+   DilloHtmlInput *input = Html_get_current_input(html);
+   if (input &&
+       (input->type == DILLO_HTML_INPUT_SELECT ||
+        input->type == DILLO_HTML_INPUT_SEL_LIST)) {
+      char *label = a_Html_get_attr_wdef(html, tag, tagsize, "label", NULL);
+      bool enabled = (a_Html_get_attr(html, tag, tagsize, "disabled") == NULL);
+
+      if (!label) {
+         BUG_MSG("label attribute is required for <optgroup>\n");
+         label = strdup("");
+      }
+
+      DilloHtmlOptgroup *opt =
+         new DilloHtmlOptgroup (label, enabled);
+
+      input->select->addOpt(opt);
+   }
+}
+
+void Html_tag_close_optgroup(DilloHtml *html)
+{
+   if (html->InFlags & IN_OPTGROUP) {
+      html->InFlags &= ~IN_OPTGROUP;
+
+      if (html->InFlags & IN_OPTION) {
+         Html_option_finish(html);
+         html->InFlags &= ~IN_OPTION;
+      }
+
+      DilloHtmlInput *input = Html_get_current_input(html);
+      if (input &&
+          (input->type == DILLO_HTML_INPUT_SELECT ||
+           input->type == DILLO_HTML_INPUT_SEL_LIST)) {
+         DilloHtmlOptgroupClose *opt = new DilloHtmlOptgroupClose ();
+
+         input->select->addOpt(opt);
+      }
    }
 }
 
@@ -785,13 +867,18 @@ void Html_tag_open_option(DilloHtml *html, const char *tag, int tagsize)
    html->InFlags |= IN_OPTION;
 
    DilloHtmlInput *input = Html_get_current_input(html);
-
-   if (input->type == DILLO_HTML_INPUT_SELECT ||
-       input->type == DILLO_HTML_INPUT_SEL_LIST) {
+   if (input &&
+       (input->type == DILLO_HTML_INPUT_SELECT ||
+        input->type == DILLO_HTML_INPUT_SEL_LIST)) {
       char *value = a_Html_get_attr_wdef(html, tag, tagsize, "value", NULL);
+      char *label = a_Html_get_attr_wdef(html, tag, tagsize, "label", NULL);
       bool selected = (a_Html_get_attr(html, tag, tagsize,"selected") != NULL);
       bool enabled = (a_Html_get_attr(html, tag, tagsize, "disabled") == NULL);
-      input->select->addOption(value, selected, enabled);
+
+      DilloHtmlOption *option =
+         new DilloHtmlOption (value, label, selected, enabled);
+
+      input->select->addOpt(option);
    }
 
    a_Html_stash_init(html);
@@ -817,16 +904,9 @@ void Html_tag_open_button(DilloHtml *html, const char *tag, int tagsize)
    DilloHtmlInputType inp_type;
    char *type;
 
-   if (html->InFlags & IN_BUTTON) {
-      BUG_MSG("nested <button>\n");
-      return;
-   }
-   if (html->InFlags & IN_SELECT) {
-      BUG_MSG("<button> element inside <select>\n");
-      return;
-   }
-   html->InFlags |= IN_BUTTON;
+   assert((html->InFlags & (IN_BUTTON | IN_SELECT | IN_TEXTAREA)) == 0);
 
+   html->InFlags |= IN_BUTTON;
    type = a_Html_get_attr_wdef(html, tag, tagsize, "type", "");
 
    if (!dStrAsciiCasecmp(type, "button")) {
@@ -858,16 +938,16 @@ void Html_tag_open_button(DilloHtml *html, const char *tag, int tagsize)
        * but it caused 100% CPU usage.
        */
       page = new Textblock (false);
-      page->setStyle (html->styleEngine->backgroundStyle ());
+      page->setStyle (html->backgroundStyle ());
 
       ResourceFactory *factory = HT2LT(html)->getResourceFactory();
       Resource *resource = factory->createComplexButtonResource(page, true);
       embed = new Embed(resource);
 // a_Dw_button_set_sensitive (DW_BUTTON (button), FALSE);
 
-      HT2TB(html)->addParbreak (5, html->styleEngine->wordStyle ());
-      HT2TB(html)->addWidget (embed, html->styleEngine->backgroundStyle ());
-      HT2TB(html)->addParbreak (5, html->styleEngine->wordStyle ());
+      HT2TB(html)->addParbreak (5, html->wordStyle ());
+      HT2TB(html)->addWidget (embed, html->backgroundStyle ());
+      HT2TB(html)->addParbreak (5, html->wordStyle ());
 
       S_TOP(html)->textblock = html->dw = page;
 
@@ -1792,7 +1872,7 @@ void DilloHtmlInput::reset ()
  */
 DilloHtmlSelect::DilloHtmlSelect ()
 {
-   options = new misc::SimpleVector<DilloHtmlOption *> (4);
+   opts = new misc::SimpleVector<DilloHtmlOptbase *> (4);
 }
 
 /*
@@ -1800,24 +1880,22 @@ DilloHtmlSelect::DilloHtmlSelect ()
  */
 DilloHtmlSelect::~DilloHtmlSelect ()
 {
-   int size = options->size ();
+   int size = opts->size ();
    for (int k = 0; k < size; k++)
-      delete options->get (k);
-   delete options;
+      delete opts->get (k);
+   delete opts;
 }
 
-DilloHtmlOption *DilloHtmlSelect::getCurrentOption ()
+DilloHtmlOptbase *DilloHtmlSelect::getCurrentOpt ()
 {
-   return options->get (options->size() - 1);
+   return opts->get (opts->size() - 1);
 }
 
-void DilloHtmlSelect::addOption (char *value, bool selected, bool enabled)
+void DilloHtmlSelect::addOpt (DilloHtmlOptbase *opt)
 {
-   DilloHtmlOption *option =
-      new DilloHtmlOption (value, selected, enabled);
-   int size = options->size ();
-   options->increase ();
-   options->set (size, option);
+   int size = opts->size ();
+   opts->increase ();
+   opts->set (size, opt);
 }
 
 /*
@@ -1825,46 +1903,62 @@ void DilloHtmlSelect::addOption (char *value, bool selected, bool enabled)
  */
 void DilloHtmlSelect::ensureSelection()
 {
-   int size = options->size ();
+   int size = opts->size ();
    if (size > 0) {
       for (int i = 0; i < size; i++) {
-            DilloHtmlOption *option = options->get (i);
-            if (option->selected)
+            DilloHtmlOptbase *opt = opts->get (i);
+            if (opt->isSelected())
                return;
       }
-      DilloHtmlOption *option = options->get (0);
-      option->selected = true;
+      for (int i = 0; i < size; i++) {
+         DilloHtmlOptbase *opt = opts->get (i);
+         if (opt->select())
+            break;
+      }
    }
 }
 
-void DilloHtmlSelect::addOptionsTo (SelectionResource *res)
+void DilloHtmlSelect::addOptsTo (SelectionResource *res)
 {
-   int size = options->size ();
+   int size = opts->size ();
    for (int i = 0; i < size; i++) {
-      DilloHtmlOption *option = options->get (i);
-      res->addItem(option->content, option->enabled, option->selected);
+      DilloHtmlOptbase *opt = opts->get (i);
+      opt->addSelf(res);
    }
 }
 
 void DilloHtmlSelect::reset (SelectionResource *res)
 {
-   int size = options->size ();
+   int size = opts->size ();
    for (int i = 0; i < size; i++) {
-      DilloHtmlOption *option = options->get (i);
-      res->setItem(i, option->selected);
+      DilloHtmlOptbase *opt = opts->get (i);
+      res->setItem(i, opt->isSelected());
    }
 }
 
 void DilloHtmlSelect::appendValuesTo (Dlist *values, SelectionResource *res)
 {
-   int size = options->size ();
+   int size = opts->size ();
    for (int i = 0; i < size; i++) {
       if (res->isSelected (i)) {
-         DilloHtmlOption *option = options->get (i);
-         char *val = option->value ? option->value : option->content;
-         dList_append(values, dStr_new(val));
+         DilloHtmlOptbase *opt = opts->get (i);
+         const char *val = opt->getValue();
+
+         if (val)
+            dList_append(values, dStr_new(val));
       }
    }
+}
+
+DilloHtmlOptgroup::DilloHtmlOptgroup (char *label, bool enabled)
+{
+   this->label = label;
+   this->enabled = enabled;
+}
+
+DilloHtmlOptgroup::~DilloHtmlOptgroup ()
+{
+   dFree(label);
 }
 
 /*
@@ -1874,11 +1968,11 @@ void DilloHtmlSelect::appendValuesTo (Dlist *values, SelectionResource *res)
 /*
  * Constructor
  */
-DilloHtmlOption::DilloHtmlOption (char *value2,
-                                  bool selected2,
+DilloHtmlOption::DilloHtmlOption (char *value2, char *label2, bool selected2,
                                   bool enabled2)
 {
    value = value2;
+   label = label2;
    content = NULL;
    selected = selected2;
    enabled = enabled2;
@@ -1890,6 +1984,7 @@ DilloHtmlOption::DilloHtmlOption (char *value2,
 DilloHtmlOption::~DilloHtmlOption ()
 {
    dFree(value);
+   dFree(label);
    dFree(content);
 }
 
@@ -1908,14 +2003,18 @@ static Embed *Html_input_image(DilloHtml *html, const char *tag, int tagsize)
    html->styleEngine->setPseudoLink ();
 
    /* create new image and add it to the button */
-   a_Html_image_attrs(html, tag, tagsize);
+   a_Html_common_image_attrs(html, tag, tagsize);
    if ((Image = a_Html_image_new(html, tag, tagsize))) {
-      IM2DW(Image)->setStyle (html->styleEngine->backgroundStyle ());
+      // At this point, we know that Image->ir represents an image
+      // widget. Notice that the order of the casts matters, because
+      // of multiple inheritance.
+      dw::Image *dwi = (dw::Image*)(dw::core::ImgRenderer*)Image->img_rndr;
+      dwi->setStyle (html->backgroundStyle ());
       ResourceFactory *factory = HT2LT(html)->getResourceFactory();
       ComplexButtonResource *complex_b_r =
-         factory->createComplexButtonResource(IM2DW(Image), false);
+         factory->createComplexButtonResource(dwi, false);
       button = new Embed(complex_b_r);
-      HT2TB(html)->addWidget (button, html->styleEngine->style ());
+      HT2TB(html)->addWidget (button, html->style ());
    }
    if (!button)
       MSG("Html_input_image: unable to create image submit.\n");
@@ -1928,10 +2027,10 @@ static Embed *Html_input_image(DilloHtml *html, const char *tag, int tagsize)
 static void Html_option_finish(DilloHtml *html)
 {
    DilloHtmlInput *input = Html_get_current_input(html);
-   if (input->type == DILLO_HTML_INPUT_SELECT ||
-       input->type == DILLO_HTML_INPUT_SEL_LIST) {
-      DilloHtmlOption *option =
-         input->select->getCurrentOption ();
-      option->content = dStrndup(html->Stash->str, html->Stash->len);
+   if (input &&
+       (input->type == DILLO_HTML_INPUT_SELECT ||
+        input->type == DILLO_HTML_INPUT_SEL_LIST)) {
+      DilloHtmlOptbase *opt = input->select->getCurrentOpt ();
+      opt->setContent (html->Stash->str, html->Stash->len);
    }
 }
