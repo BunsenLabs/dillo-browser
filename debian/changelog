@@ -1,6 +1,6 @@
-dillo (3.0.4~rc1-1) UNRELEASED; urgency=low
+dillo (3.0.4-1) UNRELEASED; urgency=low
 
-  * New upstream release candidate
+  * New upstream release
     + Drop FTBFS-on-hurd.patch. Applied upstream.
   * Fix lintian warning debian-watch-may-check-gpg-signature
 
