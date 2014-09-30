@@ -21,7 +21,7 @@ Architecture: any
 Depends: wget,
          ${misc:Depends},
          ${shlibs:Depends}
-Recommends: perl-modules,
+Recommends: perl,
             ${perl:Depends}
 Provides: www-browser
 Description: Small and fast web browser
