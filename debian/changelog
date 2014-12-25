@@ -1,9 +1,9 @@
-dillo (3.0.4.1-1) UNRELEASED; urgency=low
+dillo (3.0.4.1-1) experimental; urgency=low
 
   * New upstream release
   * Drop git-import-orig from watch file.
 
- -- Axel Beckert <abe@debian.org>  Wed, 24 Dec 2014 15:55:41 +0100
+ -- Axel Beckert <abe@debian.org>  Thu, 25 Dec 2014 23:25:58 +0100
 
 dillo (3.0.4-2) unstable; urgency=medium
 
