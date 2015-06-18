@@ -425,17 +425,17 @@ void Image::setBuffer (core::Imgbuf *buffer, bool resize)
 {
    core::Imgbuf *oldBuf = this->buffer;
 
-   if (resize)
-      queueResize (0, true);
-
-   if (wasAllocated () && getContentWidth () > 0 && getContentHeight () > 0) {
-      // Only scale when both dimensions are known.
+   if (wasAllocated () && needsResize () &&
+      getContentWidth () > 0 && getContentHeight () > 0) {
+      // Don't create a new buffer for the transition from alt text to img,
+      // and only scale when both dimensions are known.
       this->buffer =
          buffer->getScaledBuf (getContentWidth (), getContentHeight ());
    } else {
       this->buffer = buffer;
       buffer->ref ();
    }
+   queueResize (0, true);
 
    DBG_OBJ_ASSOC_CHILD (this->buffer);
 

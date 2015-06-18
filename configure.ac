@@ -1,6 +1,6 @@
 dnl Process this file with aclocal, autoconf and automake.
 
-AC_INIT([dillo], [3.0.4.1])
+AC_INIT([dillo], [3.0.5-rc1])
 
 dnl Detect the canonical target build environment
 AC_CANONICAL_TARGET
@@ -112,12 +112,13 @@ dnl -------------------------
 dnl
 dnl For debugging and to be user friendly
 AC_MSG_CHECKING([FLTK 1.3])
-fltk_version="`fltk-config --version 2>/dev/null`"
+AC_PATH_PROG(FLTK_CONFIG,fltk-config)
+fltk_version="`$FLTK_CONFIG --version 2>/dev/null`"
 case $fltk_version in
   1.3.*) AC_MSG_RESULT(yes)
-         LIBFLTK_CXXFLAGS=`fltk-config --cxxflags`
-         LIBFLTK_CFLAGS=`fltk-config --cflags`
-         LIBFLTK_LIBS=`fltk-config --ldflags`;;
+         LIBFLTK_CXXFLAGS=`$FLTK_CONFIG --cxxflags`
+         LIBFLTK_CFLAGS=`$FLTK_CONFIG --cflags`
+         LIBFLTK_LIBS=`$FLTK_CONFIG --ldflags`;;
   ?*)    AC_MSG_RESULT(no)
          AC_MSG_ERROR(FLTK 1.3 required; version found: $fltk_version);;
   *)     AC_MSG_RESULT(no)
@@ -208,7 +209,10 @@ if test "x$enable_png" = "xyes"; then
 
 dnl Check if the user hasn't set the variable $PNG_CONFIG
   if test -z "$PNG_CONFIG"; then
-    PNG_CONFIG=`which libpng14-config`
+    PNG_CONFIG=`which libpng16-config`
+    if test -z "$PNG_CONFIG"; then
+      PNG_CONFIG=`which libpng14-config`
+    fi
     if test -z "$PNG_CONFIG"; then
       PNG_CONFIG=`which libpng12-config`
     fi
@@ -234,7 +238,7 @@ dnl For debugging and to be user friendly
     AC_MSG_CHECKING([for libpng version])
     png_version=`$PNG_CONFIG --version`
     case $png_version in
-      1.[[024]].*) AC_MSG_RESULT([$png_version]) ;;
+      1.[[0246]].*) AC_MSG_RESULT([$png_version]) ;;
                 *) AC_MSG_RESULT([$png_version (unrecognised version)]) ;;
     esac
 

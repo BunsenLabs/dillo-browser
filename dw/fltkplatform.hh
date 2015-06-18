@@ -110,9 +110,11 @@ private:
                           int rows);
       core::ui::OptionMenuResource *createOptionMenuResource ();
       core::ui::EntryResource *createEntryResource (int size, bool password,
-                                                    const char *label);
+                                                    const char *label,
+                                                    const char *placeholder);
       core::ui::MultiLineTextResource *createMultiLineTextResource (int cols,
-                                                                    int rows);
+                                                                    int rows,
+                                                      const char *placeholder);
       core::ui::CheckButtonResource *createCheckButtonResource (bool
                                                                 activated);
       core::ui::RadioButtonResource *

@@ -37,23 +37,130 @@
 #include <stdio.h>
 
 //----------------------------------------------------------------------------
+
+static Fl_Color fltkui_dimmed(Fl_Color c, Fl_Color bg)
+{
+   return fl_color_average(c, bg, .33f);
+};
+
+//----------------------------------------------------------------------------
 /*
  * Local sub classes
  */
 
 /*
- * Used to enable CTRL+{a,e,d,k} in form inputs (for start,end,del,cut)
+ * Used to show optional placeholder text and to enable CTRL+{a,e,d,k} in
+ * form inputs (for start,end,del,cut)
  */
 class CustInput2 : public Fl_Input {
 public:
-   CustInput2 (int x, int y, int w, int h, const char* l=0) :
-      Fl_Input(x,y,w,h,l) {};
+   CustInput2 (int x, int y, int w, int h, const char* l=0);
+   ~CustInput2 () { if (placeholder) free(placeholder); };
+   void set_placeholder(const char *str);
+   int show_placeholder();
+   int show_normal(const char *str);
+   void textcolor(Fl_Color c);
+   void input_type(int t);
+   int value(const char* str);
+   const char* value();
    int handle(int e);
+private:
+   char *placeholder;
+   bool showing_placeholder;
+   Fl_Color usual_color;
+   int usual_type;
 };
+
+CustInput2::CustInput2 (int x, int y, int w, int h, const char* l) :
+   Fl_Input(x,y,w,h,l)
+{
+   placeholder = NULL;
+   showing_placeholder = false;
+   usual_color = FL_BLACK;      /* just init until widget style is set */
+};
+
+/*
+ * Show normal text.
+ */
+int CustInput2::show_normal(const char *str)
+{
+   showing_placeholder = false;
+   Fl_Input::textcolor(usual_color);
+   Fl_Input::input_type(usual_type);
+   return Fl_Input::value(str);
+}
+
+/*
+ * Show the placeholder text.
+ */
+int CustInput2::show_placeholder()
+{
+   int ret;
+
+   showing_placeholder = true;
+   Fl_Input::textcolor(fltkui_dimmed(usual_color, color()));
+   Fl_Input::input_type(FL_NORMAL_INPUT);
+   ret = Fl_Input::value(placeholder);
+   position(0);
+   return ret;
+}
+
+/*
+ * Set the placeholder text.
+ */
+void CustInput2::set_placeholder(const char *str)
+{
+   if (placeholder)
+      free(placeholder);
+   placeholder = strdup(str);
+
+   if ((Fl::focus() != this) && !*value()) {
+      show_placeholder();
+   }
+}
+
+/*
+ * Set the text color.
+ */
+void CustInput2::textcolor(Fl_Color c)
+{
+   usual_color = c;
+   if (showing_placeholder)
+      c = fltkui_dimmed(c, color());
+   Fl_Input::textcolor(c);
+}
+
+/*
+ * Set the input type (normal, password, etc.)
+ */
+void CustInput2::input_type(int t)
+{
+   usual_type = t;
+   Fl_Input::input_type(t);
+}
+
+/*
+ * Set the value of the input.
+ * NOTE that we're not being very careful with the return value, which is
+ * supposed to be nonzero iff the value was changed.
+ */
+int CustInput2::value(const char *str)
+{
+   return (placeholder && (!str || !*str) && Fl::focus() != this)
+          ? show_placeholder() : show_normal(str);
+}
+
+/*
+ * Return the value (text) of the input.
+ */
+const char* CustInput2::value()
+{
+   return showing_placeholder ? "" : Fl_Input::value();
+}
 
 int CustInput2::handle(int e)
 {
-   int k = Fl::event_key();
+   int rc, k = Fl::event_key();
 
    _MSG("CustInput2::handle event=%d\n", e);
 
@@ -82,8 +189,154 @@ int CustInput2::handle(int e)
             return 0;
          }
       }
+   } else if (e == FL_UNFOCUS) {
+      if (placeholder && !value()[0]) {
+         show_placeholder();
+      }
    }
-   return Fl_Input::handle(e);
+
+   rc = Fl_Input::handle(e);
+
+   if (rc && e == FL_FOCUS) {
+      // Nonzero return from handle() should mean that focus was accepted.
+      if (showing_placeholder)
+         show_normal("");
+   }
+   return rc;
+}
+
+/*
+ * Used to show optional placeholder text.
+ */
+class CustTextEditor : public Fl_Text_Editor {
+public:
+   CustTextEditor (int x, int y, int w, int h, const char* l=0);
+   ~CustTextEditor ();
+   void set_placeholder(const char *str);
+   void show_placeholder();
+   void show_normal(const char *str);
+   void textcolor(Fl_Color c);
+   void value(const char* str);
+   char* value();
+   int handle(int e);
+private:
+   char *placeholder;
+   bool showing_placeholder;
+   Fl_Color usual_color;
+   char *text_copy;
+};
+
+CustTextEditor::CustTextEditor (int x, int y, int w, int h, const char* l) :
+                               Fl_Text_Editor(x,y,w,h,l)
+{
+   placeholder = NULL;
+   showing_placeholder = false;
+   buffer(new Fl_Text_Buffer());
+   usual_color = FL_BLACK;      /* just init until widget style is set */
+   text_copy = NULL;
+};
+
+CustTextEditor::~CustTextEditor ()
+{
+   Fl_Text_Buffer *buf = buffer();
+
+   buffer(NULL);
+   delete buf;
+
+   if (placeholder)
+      free(placeholder);
+   if (text_copy)
+      free(text_copy);
+}   
+
+/*
+ * Show normal text.
+ */
+void CustTextEditor::show_normal(const char *str)
+{
+   showing_placeholder = false;
+   Fl_Text_Editor::textcolor(usual_color);
+   buffer()->text(str);
+}
+
+/*
+ * Show the placeholder text.
+ */
+void CustTextEditor::show_placeholder()
+{
+   showing_placeholder = true;
+   Fl_Text_Editor::textcolor(fltkui_dimmed(usual_color, color()));
+   buffer()->text(placeholder);
+}
+
+/*
+ * Set the placeholder text.
+ */
+void CustTextEditor::set_placeholder(const char *str)
+{
+   if (placeholder)
+      free(placeholder);
+   placeholder = strdup(str);
+
+   if ((Fl::focus() != this) && buffer()->length() == 0) {
+      show_placeholder();
+   }
+}
+
+/*
+ * Set the text color.
+ */
+void CustTextEditor::textcolor(Fl_Color c)
+{
+   usual_color = c;
+   if (showing_placeholder)
+      c = fltkui_dimmed(c, color());
+   Fl_Text_Editor::textcolor(c);
+}
+
+/*
+ * Set the value of the input.
+ */
+void CustTextEditor::value(const char *str)
+{
+   if (placeholder && (!str || !*str) && Fl::focus() != this)
+      show_placeholder();
+   else
+      show_normal(str);
+}
+
+/*
+ * Return the value (text) of the input.
+ */
+char* CustTextEditor::value()
+{
+   /* FLTK-1.3 insists upon returning a new copy of the buffer text, so
+    * we have to keep track of it.
+    */
+   if (text_copy)
+      free(text_copy);
+   text_copy = showing_placeholder ? strdup("") : buffer()->text();
+   return text_copy;
+}
+
+int CustTextEditor::handle(int e)
+{
+   int rc;
+
+   if (e == FL_UNFOCUS) {
+      if (placeholder && buffer()->length() == 0) {
+         show_placeholder();
+      }
+   }
+
+   rc = Fl_Text_Editor::handle(e);
+
+   if (rc && e == FL_FOCUS) {
+      // Nonzero return from handle() should mean that focus was accepted.
+      if (showing_placeholder)
+         show_normal("");
+   }
+   return rc;
 }
 
 
@@ -563,13 +816,15 @@ Fl_Widget *FltkComplexButtonResource::createNewWidget (core::Allocation
 // ----------------------------------------------------------------------
 
 FltkEntryResource::FltkEntryResource (FltkPlatform *platform, int size,
-                                      bool password, const char *label):
+                                      bool password, const char *label,
+                                      const char *placeholder):
    FltkSpecificResource <dw::core::ui::EntryResource> (platform)
 {
    this->size = size;
    this->password = password;
    this->label = label ? strdup(label) : NULL;
    this->label_w = 0;
+   this->placeholder = placeholder ? strdup(placeholder) : NULL;
 
    initText = NULL;
    editable = false;
@@ -583,16 +838,17 @@ FltkEntryResource::~FltkEntryResource ()
       free((char *)initText);
    if (label)
       free(label);
+   if (placeholder)
+      free(placeholder);
 }
 
 Fl_Widget *FltkEntryResource::createNewWidget (core::Allocation
                                                     *allocation)
 {
-   Fl_Input *input =
+   CustInput2 *input =
         new CustInput2(allocation->x, allocation->y, allocation->width,
                       allocation->ascent + allocation->descent);
-   if (password)
-      input->type(FL_SECRET_INPUT);
+   input->input_type(password ? FL_SECRET_INPUT : FL_NORMAL_INPUT);
    input->callback (widgetCallback, this);
    input->when (FL_WHEN_ENTER_KEY_ALWAYS);
 
@@ -602,6 +858,8 @@ Fl_Widget *FltkEntryResource::createNewWidget (core::Allocation
    }
    if (initText)
       input->value (initText);
+   if (placeholder)
+      input->set_placeholder(placeholder);
 
    return input;
 }
@@ -609,12 +867,12 @@ Fl_Widget *FltkEntryResource::createNewWidget (core::Allocation
 void FltkEntryResource::setWidgetStyle (Fl_Widget *widget,
                                         core::style::Style *style)
 {
-   Fl_Input *in = (Fl_Input *)widget;
+   CustInput2 *in = (CustInput2 *)widget;
 
    FltkResource::setWidgetStyle(widget, style);
 
    in->textcolor(widget->labelcolor());
-   in->cursor_color(in->textcolor());
+   in->cursor_color(widget->labelcolor());
    in->textsize(in->labelsize());
    in->textfont(in->labelfont());
 
@@ -674,7 +932,7 @@ void FltkEntryResource::widgetCallback (Fl_Widget *widget, void *data)
 
 const char *FltkEntryResource::getText ()
 {
-   return ((Fl_Input*)widget)->value ();
+   return ((CustInput2*)widget)->value ();
 }
 
 void FltkEntryResource::setText (const char *text)
@@ -683,7 +941,7 @@ void FltkEntryResource::setText (const char *text)
       free((char *)initText);
    initText = strdup (text);
 
-   ((Fl_Input*)widget)->value (initText);
+   ((CustInput2*)widget)->value (initText);
 }
 
 bool FltkEntryResource::isEditable ()
@@ -718,11 +976,10 @@ static int kf_backspace_word (int c, Fl_Text_Editor *e)
 }
 
 FltkMultiLineTextResource::FltkMultiLineTextResource (FltkPlatform *platform,
-                                                      int cols, int rows):
+                                                      int cols, int rows,
+                                                      const char *placeholder):
    FltkSpecificResource <dw::core::ui::MultiLineTextResource> (platform)
 {
-   buffer = new Fl_Text_Buffer;
-   text_copy = NULL;
    editable = false;
 
    numCols = cols;
@@ -737,42 +994,41 @@ FltkMultiLineTextResource::FltkMultiLineTextResource (FltkPlatform *platform,
       MSG_WARN("numRows = %d is set to 1.\n", numRows);
       numRows = 1;
    }
+   this->placeholder = placeholder ? strdup(placeholder) : NULL;
 
    init (platform);
 }
 
 FltkMultiLineTextResource::~FltkMultiLineTextResource ()
 {
-   /* Free memory avoiding a double-free of text buffers */
-   ((Fl_Text_Editor *) widget)->buffer (0);
-   delete buffer;
-   if (text_copy)
-      free(text_copy);
+   if (placeholder)
+      free(placeholder);
 }
 
 Fl_Widget *FltkMultiLineTextResource::createNewWidget (core::Allocation
                                                             *allocation)
 {
-   Fl_Text_Editor *text =
-      new Fl_Text_Editor (allocation->x, allocation->y, allocation->width,
+   CustTextEditor *text =
+      new CustTextEditor (allocation->x, allocation->y, allocation->width,
                           allocation->ascent + allocation->descent);
    text->wrap_mode(Fl_Text_Display::WRAP_AT_BOUNDS, 0);
-   text->buffer (buffer);
    text->remove_key_binding(FL_BackSpace, FL_TEXT_EDITOR_ANY_STATE);
    text->add_key_binding(FL_BackSpace, 0, Fl_Text_Editor::kf_backspace);
    text->add_key_binding(FL_BackSpace, FL_CTRL, kf_backspace_word);
+   if (placeholder)
+      text->set_placeholder(placeholder);
    return text;
 }
 
 void FltkMultiLineTextResource::setWidgetStyle (Fl_Widget *widget,
                                                 core::style::Style *style)
 {
-   Fl_Text_Editor *ed = (Fl_Text_Editor *)widget;
+   CustTextEditor *ed = (CustTextEditor *)widget;
 
    FltkResource::setWidgetStyle(widget, style);
 
    ed->textcolor(widget->labelcolor());
-   ed->cursor_color(ed->textcolor());
+   ed->cursor_color(widget->labelcolor());
    ed->textsize(ed->labelsize());
    ed->textfont(ed->labelfont());
 }
@@ -801,18 +1057,12 @@ void FltkMultiLineTextResource::sizeRequest (core::Requisition *requisition)
 
 const char *FltkMultiLineTextResource::getText ()
 {
-   /* FLTK-1.3 insists upon returning a new copy of the buffer text, so
-    * we have to keep track of it.
-    */
-   if (text_copy)
-      free(text_copy);
-   text_copy = buffer->text();
-   return text_copy;
+   return ((CustTextEditor*)widget)->value ();
 }
 
 void FltkMultiLineTextResource::setText (const char *text)
 {
-   buffer->text (text);
+   ((CustTextEditor*)widget)->value (text);
 }
 
 bool FltkMultiLineTextResource::isEditable ()

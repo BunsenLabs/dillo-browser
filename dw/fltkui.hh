@@ -301,6 +301,7 @@ private:
    const char *initText;
    char *label;
    int label_w;
+   char *placeholder;
    bool editable;
 
    static void widgetCallback (Fl_Widget *widget, void *data);
@@ -312,7 +313,7 @@ protected:
 
 public:
    FltkEntryResource (FltkPlatform *platform, int size, bool password,
-                      const char *label);
+                      const char *label, const char *placeholder);
    ~FltkEntryResource ();
 
    void sizeRequest (core::Requisition *requisition);
@@ -330,17 +331,16 @@ class FltkMultiLineTextResource:
    public FltkSpecificResource <dw::core::ui::MultiLineTextResource>
 {
 private:
-   Fl_Text_Buffer *buffer;
-   char *text_copy;
    bool editable;
    int numCols, numRows;
-
+   char *placeholder;
 protected:
    Fl_Widget *createNewWidget (core::Allocation *allocation);
    void setWidgetStyle (Fl_Widget *widget, core::style::Style *style);
 
 public:
-   FltkMultiLineTextResource (FltkPlatform *platform, int cols, int rows);
+   FltkMultiLineTextResource (FltkPlatform *platform, int cols, int rows,
+                              const char *placeholder);
    ~FltkMultiLineTextResource ();
 
    void sizeRequest (core::Requisition *requisition);
