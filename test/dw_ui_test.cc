@@ -81,12 +81,14 @@ int main(int argc, char **argv)
    // First of all, the resources. Later, they are embedded into the
    // widget tree.
    EntryResource *entryres1 =
-      layout->getResourceFactory()->createEntryResource (10, false, NULL);
+      layout->getResourceFactory()->createEntryResource (10, false, NULL,NULL);
    entryres1->setText ("Hi!");
    EntryResource *entryres2 =
-      layout->getResourceFactory()->createEntryResource (10, true, NULL);
+      layout->getResourceFactory()->createEntryResource (10, true, NULL,
+                                                         "password field!");
    MultiLineTextResource *textres =
-      layout->getResourceFactory()->createMultiLineTextResource (15,3);
+      layout->getResourceFactory()->createMultiLineTextResource (15,3,
+                                                      "textarea placeholder!");
    RadioButtonResource *radiores1 =
       layout->getResourceFactory()->createRadioButtonResource (NULL, false);
    RadioButtonResource *radiores2 =

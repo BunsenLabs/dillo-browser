@@ -413,16 +413,19 @@ FltkPlatform::FltkResourceFactory::createOptionMenuResource ()
 core::ui::EntryResource *
 FltkPlatform::FltkResourceFactory::createEntryResource (int size,
                                                         bool password,
-                                                        const char *label)
+                                                        const char *label,
+                                                       const char *placeholder)
 {
-   return new ui::FltkEntryResource (platform, size, password, label);
+   return new ui::FltkEntryResource (platform, size, password, label,
+                                     placeholder);
 }
 
 core::ui::MultiLineTextResource *
 FltkPlatform::FltkResourceFactory::createMultiLineTextResource (int cols,
-                                                                int rows)
+                                                                int rows,
+                                                       const char *placeholder)
 {
-   return new ui::FltkMultiLineTextResource (platform, cols, rows);
+   return new ui::FltkMultiLineTextResource (platform, cols, rows,placeholder);
 }
 
 core::ui::CheckButtonResource *
