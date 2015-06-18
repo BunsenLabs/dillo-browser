@@ -1,3 +1,9 @@
+dillo (3.0.5~rc1-1) UNRELEASED; urgency=medium
+
+  * New upstream release candidate.
+
+ -- Axel Beckert <abe@debian.org>  Thu, 18 Jun 2015 19:33:01 +0200
+
 dillo (3.0.4.1-2) unstable; urgency=medium
 
   * Upload to unstable again.
