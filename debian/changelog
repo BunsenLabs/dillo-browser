@@ -1,3 +1,10 @@
+dillo (3.0.5-2) unstable; urgency=medium
+
+  * Drop alternative build-dependency on to be removed libpng12-dev.
+    (Closes: #810179)
+
+ -- Axel Beckert <abe@debian.org>  Fri, 08 Jan 2016 11:34:37 +0100
+
 dillo (3.0.5-1) unstable; urgency=medium
 
   * New upstream release.
