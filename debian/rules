@@ -7,6 +7,8 @@ ifneq ($(DEB_BUILD_ARCH_OS),linux)
 export DEB_LDFLAGS_MAINT_APPEND=-lpthread
 endif
 
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+
 %:
 	dh $@ --parallel --with autoreconf
 
