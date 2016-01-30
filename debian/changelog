@@ -1,4 +1,4 @@
-dillo (3.0.5-2) unstable; urgency=medium
+dillo (3.0.5-2) UNRELEASED; urgency=medium
 
   * Drop alternative build-dependency on to be removed libpng12-dev.
     (Closes: #810179)
