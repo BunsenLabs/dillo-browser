@@ -1,6 +1,7 @@
 dillo (3.0.5-3) UNRELEASED; urgency=medium
 
   * Update path to global dillorc in README.Debian to current value.
+  * Document in README.Debian how to disable dillo's debug messages.
 
  -- Axel Beckert <abe@debian.org>  Fri, 13 May 2016 14:31:49 +0200
 
