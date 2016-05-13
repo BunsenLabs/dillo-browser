@@ -1,3 +1,9 @@
+dillo (3.0.5-3) UNRELEASED; urgency=medium
+
+  * Update path to global dillorc in README.Debian to current value.
+
+ -- Axel Beckert <abe@debian.org>  Fri, 13 May 2016 14:31:49 +0200
+
 dillo (3.0.5-2) unstable; urgency=medium
 
   * Drop alternative build-dependency on to be removed libpng12-dev.
