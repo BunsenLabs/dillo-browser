@@ -5,6 +5,7 @@ dillo (3.0.5-3) UNRELEASED; urgency=medium
   * Declare compliance with Debian Policy 3.9.8.
   * Switch Vcs-Git header from git:// to https://.
   * Switch DEP5 format header from http:// to https://.
+  * Switch to dh compat level 10, drop --parallel and --with autoreconf.
 
  -- Axel Beckert <abe@debian.org>  Fri, 13 May 2016 14:31:49 +0200
 

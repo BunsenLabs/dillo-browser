@@ -10,7 +10,7 @@ endif
 export DEB_BUILD_MAINT_OPTIONS=hardening=+all
 
 %:
-	dh $@ --parallel --with autoreconf
+	dh $@
 
 override_dh_auto_configure:
 	dh_auto_configure -- --enable-ipv6 --enable-ssl
