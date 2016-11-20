@@ -6,6 +6,8 @@ dillo (3.0.5-3) UNRELEASED; urgency=medium
   * Switch Vcs-Git header from git:// to https://.
   * Switch DEP5 format header from http:// to https://.
   * Switch to dh compat level 10, drop --parallel and --with autoreconf.
+  * Add patch to fix OpenSSL detection. (Closes: #845035) Thanks Hilko
+    Bengen for the report and the hint into the right direction!
 
  -- Axel Beckert <abe@debian.org>  Fri, 13 May 2016 14:31:49 +0200
 
