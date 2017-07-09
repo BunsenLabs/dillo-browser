@@ -2,7 +2,7 @@ Source: dillo
 Section: web
 Priority: extra
 Maintainer: Axel Beckert <abe@debian.org>
-Standards-Version: 3.9.8
+Standards-Version: 4.0.0
 Build-Depends: debhelper (>= 10),
                dh-autoreconf,
                dpkg-dev (>= 1.16.1~),

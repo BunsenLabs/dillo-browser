@@ -1,3 +1,9 @@
+dillo (3.0.5-4) UNRELEASED; urgency=medium
+
+  * Declare compliance with Debian Policy 4.0.0. (No changes needed.)
+
+ -- Axel Beckert <abe@debian.org>  Sat, 08 Jul 2017 12:28:48 +0200
+
 dillo (3.0.5-3) unstable; urgency=medium
 
   * Update path to global dillorc in README.Debian to current value.
