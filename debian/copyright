@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: Dillo
-Source: http://www.dillo.org/
+Source: https://www.dillo.org/
 License: GPL-3+
 
 Files: *
