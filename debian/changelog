@@ -8,6 +8,8 @@ dillo (3.0.5-4) UNRELEASED; urgency=medium
   * Remove trailing whitespace from ancient debian/changelog entries.
   * Drop build-dependency on dh-autoreconf. (No more needed since
     debhelper compat level 10.)
+  * Add lintian override for bogus tech-ctte decision imposed onto policy,
+    as the less bad of all alternatives.
 
  -- Axel Beckert <abe@debian.org>  Sat, 08 Jul 2017 12:28:48 +0200
 
