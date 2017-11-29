@@ -4,6 +4,7 @@ dillo (3.0.5-4) UNRELEASED; urgency=medium
     + Change Priority from extra to optional.
   * Follow redirect and change Dillo homepage from HTTP to HTTPS. Issue
     reported by DUCK, thanks!
+  * Set "Rules-Requires-Root: no".
 
  -- Axel Beckert <abe@debian.org>  Sat, 08 Jul 2017 12:28:48 +0200
 

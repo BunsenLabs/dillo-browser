@@ -15,6 +15,7 @@ Build-Depends: debhelper (>= 10),
 Homepage: https://www.dillo.org/
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/dillo.git
 Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/dillo.git
+Rules-Requires-Root: no
 
 Package: dillo
 Architecture: any
