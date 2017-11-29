@@ -5,6 +5,7 @@ dillo (3.0.5-4) UNRELEASED; urgency=medium
   * Follow redirect and change Dillo homepage from HTTP to HTTPS. Issue
     reported by DUCK, thanks!
   * Set "Rules-Requires-Root: no".
+  * Remove trailing whitespace from ancient debian/changelog entries.
 
  -- Axel Beckert <abe@debian.org>  Sat, 08 Jul 2017 12:28:48 +0200
 
@@ -261,7 +262,7 @@ dillo (0.8.6-3) unstable; urgency=low
 dillo (0.8.6-2) unstable; urgency=low
 
   * QA upload.
-  * Fixed a problem with unpatch related to config.{sub,guess}. Fix based 
+  * Fixed a problem with unpatch related to config.{sub,guess}. Fix based
     on patches sent in by Bart Martens and Nicolas Valcarcel (thanks, guys!)
     (Closes: #457961, #457394).
   * Fixed spelling error in debian/NEWS.
@@ -273,14 +274,14 @@ dillo (0.8.6-2) unstable; urgency=low
 dillo (0.8.6-1) unstable; urgency=low
 
   * QA upload:
-  	+ Set maintainer to QA group
+        + Set maintainer to QA group
   * New upstream release
   * Some changes do debian/rules file:
-  	+ Tiedied debian/rules file up
-  	+ Updated debian/rules file to not ignore problems during make clean
-  	+ Replaced dh_installdirs by calling install with appropriate
-  	  parameters
-  	+ Register desktop files by calling dh_desktop
+        + Tiedied debian/rules file up
+        + Updated debian/rules file to not ignore problems during make clean
+        + Replaced dh_installdirs by calling install with appropriate
+          parameters
+        + Register desktop files by calling dh_desktop
   * Added a watch file
   * Updated to Standards-Version 3.7.2
   * Updated debhelper compatibility level to 5
@@ -459,7 +460,7 @@ dillo (0.6.4-4) unstable; urgency=low
 dillo (0.6.4-3) unstable; urgency=medium
 
   * New maintainer, closes: #138950
-  * Revert previous bogus change to font specification, 
+  * Revert previous bogus change to font specification,
     closes: #137025
 
  -- Philip Blundell <pb@debian.org>  Wed, 20 Mar 2002 01:35:24 +0000
@@ -494,7 +495,7 @@ dillo (0.6.3-1) unstable; urgency=low
 
 dillo (0.6.2-1) unstable; urgency=low
 
-  * New upstream release, (Closes: Bug#115604) 
+  * New upstream release, (Closes: Bug#115604)
 
  -- Ron Farrer <rbf@debian.org>  Thu, 18 Oct 2001 08:20:14 -0700
 
@@ -507,7 +508,7 @@ dillo (0.6.1-1) unstable; urgency=low
 dillo (0.6.0-1) unstable; urgency=low
 
   * New upstream release, (Closes: Bug#107359)
- 
+
  -- Ron Farrer <rbf@debian.org>  Tue, 31 Jul 2001 19:08:40 -0700
 
 dillo (0.5.1-2) unstable; urgency=low
@@ -541,17 +542,17 @@ dillo (0.3.2-1) unstable; urgency=low
  -- Ron Farrer <rbf@debian.org>  Thu, 01 Mar 2001 9:33:09 -0800
 
 dillo (0.3.1-2) unstable; urgency=low
-  
+
   * Fixed man page, changed splash screen; Closes bug #82748
-  
+
  -- Ron Farrer <rbf@debian.org>  Fri, 19 Jan 2001 10:05:27 -0800
-  
+
 dillo (0.3.1-1) unstable; urgency=low
-  
+
   * New upstream release.
-  
+
  -- Ron Farrer <rbf@debian.org>  Wed, 27 Dec 2000 10:14:30 -0800
-  
+
 dillo (0.3.0.0-1) unstable; urgency=low
 
   * New upstream release.
@@ -563,10 +564,10 @@ dillo (0.3.0pre1-1) unstable; urgency=low
   * New upstream release.
   * gzilla is now dead upstream, dillo takes it's place.
 
- -- Ron Farrer <rbf@debian.org>  Wed, 8 Nov 2000 08:06:40 -0800 
+ -- Ron Farrer <rbf@debian.org>  Wed, 8 Nov 2000 08:06:40 -0800
 
 dillo (0.2.4-1) unstable; urgency=low
 
   * Initial Release.
 
- -- Ron Farrer <rbf@farrer.net>  Sun, 3 Sep 2000 13:53:35 -0700 
+ -- Ron Farrer <rbf@farrer.net>  Sun, 3 Sep 2000 13:53:35 -0700
