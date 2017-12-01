@@ -1,6 +1,6 @@
 dillo (3.0.5-4) UNRELEASED; urgency=medium
 
-  * Declare compliance with Debian Policy 4.1.1.
+  * Declare compliance with Debian Policy 4.1.2.
     + Change Priority from extra to optional.
   * Follow redirect and change Dillo homepage from HTTP to HTTPS. Issue
     reported by DUCK, thanks!
