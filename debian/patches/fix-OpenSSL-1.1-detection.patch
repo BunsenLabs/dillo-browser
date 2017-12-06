@@ -1,7 +1,7 @@
 Description: Fix OpenSSL 1.1 detection and access to now opaque structures.
 Bug-Debian: https://bugs.debian.org/845035
 Author: Axel Beckert <abe@debian.org>
-Forwarded: not-yet
+Forwarded: http://lists.dillo.org/pipermail/dillo-dev/2017-September/011076.html
 
 --- a/configure.ac
 +++ b/configure.ac
