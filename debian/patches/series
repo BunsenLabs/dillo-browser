@@ -1,2 +1,3 @@
 fix-OpenSSL-1.1-detection.patch
 move-helper-tools-to-libexec.patch
+fix-perl-shebang.patch
