@@ -1,4 +1,4 @@
-dillo (3.0.5-5) unstable; urgency=medium
+dillo (3.0.5-5) UNRELEASED; urgency=medium
 
   * Declare compliance with Debian Policy 4.3.0. (No changes needed.)
   * Update Vcs-* headers for switch to Salsa.
