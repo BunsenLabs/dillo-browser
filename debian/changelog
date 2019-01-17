@@ -9,6 +9,8 @@ dillo (3.0.5-5) UNRELEASED; urgency=medium
   * Symlink dillo-install-hyphenation.1.gz to dillo.1.gz as dillo's man
     page also explains what this helper script for end-users does.
   * Fix dillo-install-hyphenation to not use /usr/bin/env in shebang line.
+  * Bump debhelper compatibility level to 12.
+    + Replace debian/compat with a versioned b-d on debhelper-compat.
 
  -- Axel Beckert <abe@debian.org>  Wed, 16 Jan 2019 19:38:27 +0100
 

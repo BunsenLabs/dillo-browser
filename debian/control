@@ -3,7 +3,7 @@ Section: web
 Priority: optional
 Maintainer: Axel Beckert <abe@debian.org>
 Standards-Version: 4.3.0
-Build-Depends: debhelper (>= 10),
+Build-Depends: debhelper-compat (= 12),
                dpkg-dev (>= 1.16.1~),
                libfltk1.3-dev (>= 1.3.2-3~),
                libglib2.0-dev,
