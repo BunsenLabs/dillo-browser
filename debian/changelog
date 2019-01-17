@@ -4,6 +4,8 @@ dillo (3.0.5-5) UNRELEASED; urgency=medium
   * Update Vcs-* headers for switch to Salsa.
   * Re-export upstream key minimally; fixes lintian warning
     public-upstream-key-not-minimal.
+  * Patch dpid/Makefile.am to install helper binaries dpid and dpidc
+    outside $PATH. (Closes: #919063)
 
  -- Axel Beckert <abe@debian.org>  Wed, 16 Jan 2019 19:38:27 +0100
 
