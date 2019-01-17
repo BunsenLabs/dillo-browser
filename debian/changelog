@@ -6,6 +6,8 @@ dillo (3.0.5-5) UNRELEASED; urgency=medium
     public-upstream-key-not-minimal.
   * Patch dpid/Makefile.am to install helper binaries dpid and dpidc
     outside $PATH. (Closes: #919063)
+  * Symlink dillo-install-hyphenation.1.gz to dillo.1.gz as dillo's man
+    page also explains what this helper script for end-users does.
 
  -- Axel Beckert <abe@debian.org>  Wed, 16 Jan 2019 19:38:27 +0100
 
