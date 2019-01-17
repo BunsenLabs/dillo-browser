@@ -1,4 +1,4 @@
-dillo (3.0.5-5) UNRELEASED; urgency=medium
+dillo (3.0.5-5) unstable; urgency=medium
 
   * Declare compliance with Debian Policy 4.3.0. (No changes needed.)
   * Update Vcs-* headers for switch to Salsa.
@@ -12,7 +12,7 @@ dillo (3.0.5-5) UNRELEASED; urgency=medium
   * Bump debhelper compatibility level to 12.
     + Replace debian/compat with a versioned b-d on debhelper-compat.
 
- -- Axel Beckert <abe@debian.org>  Wed, 16 Jan 2019 19:38:27 +0100
+ -- Axel Beckert <abe@debian.org>  Thu, 17 Jan 2019 23:32:01 +0100
 
 dillo (3.0.5-4) unstable; urgency=medium
 
