@@ -2,6 +2,8 @@ dillo (3.0.5-5) unstable; urgency=medium
 
   * Declare compliance with Debian Policy 4.3.0. (No changes needed.)
   * Update Vcs-* headers for switch to Salsa.
+  * Re-export upstream key minimally; fixes lintian warning
+    public-upstream-key-not-minimal.
 
  -- Axel Beckert <abe@debian.org>  Wed, 16 Jan 2019 19:38:27 +0100
 
