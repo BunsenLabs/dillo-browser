@@ -2,6 +2,7 @@ dillo (3.0.5-6) UNRELEASED; urgency=medium
 
   * Add patch to fix DuckDuckGo shortcut to make result links
     working. (Closes: #924357)
+  * Declare compliance with Debian Policy 4.4.1. (No changes needed.)
 
  -- Axel Beckert <abe@debian.org>  Tue, 12 Mar 2019 01:10:31 +0100
 
