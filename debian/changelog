@@ -1,6 +1,7 @@
 dillo (3.0.5-7) UNRELEASED; urgency=medium
 
   * Add patch to fix FTBFS with GCC 10. (Closes: #957136)
+  * Declare compliance with Debian Policy 4.5.0. (No changes needed.)
 
  -- Axel Beckert <abe@debian.org>  Sat, 18 Apr 2020 05:35:10 +0200
 
