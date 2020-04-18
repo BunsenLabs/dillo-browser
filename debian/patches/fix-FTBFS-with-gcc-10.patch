@@ -1,5 +1,6 @@
 Description: Fix FTBFS with gcc-10
 Bug-Debian: https://bugs.debian.org/957136
+Bug-Fedora: https://bugzilla.redhat.com/show_bug.cgi?id=1799282
 Author: Axel Beckert <abe@debian.org>
 Forwarded: no
 
