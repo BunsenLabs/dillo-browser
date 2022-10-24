@@ -1,3 +1,10 @@
+dillo (3.0.5-8) UNRELEASED; urgency=medium
+
+  * Change Homepage URL to archived copy in the Wayback Machine for
+    now. (See #1022726)
+
+ -- Axel Beckert <abe@debian.org>  Mon, 24 Oct 2022 19:32:33 +0200
+
 dillo (3.0.5-7) unstable; urgency=medium
 
   * Add patch to fix FTBFS with GCC 10. (Closes: #957136)
