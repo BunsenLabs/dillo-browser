@@ -2,18 +2,18 @@ Source: dillo
 Section: web
 Priority: optional
 Maintainer: Axel Beckert <abe@debian.org>
-Standards-Version: 4.5.0
-Build-Depends: debhelper-compat (= 12),
+Standards-Version: 4.6.1
+Build-Depends: debhelper-compat (= 13),
                dpkg-dev (>= 1.16.1~),
                libfltk1.3-dev (>= 1.3.2-3~),
                libglib2.0-dev,
                libjpeg-dev | libjpeg8-dev,
                libpng-dev,
-               libssl-dev,
-               zlib1g-dev
-Homepage: https://web.archive.org/web/20221006082222/https://www.dillo.org/
-Vcs-Git: https://salsa.debian.org/debian/dillo.git
-Vcs-Browser: https://salsa.debian.org/debian/dillo
+               zlib1g-dev,
+               libmbedtls-dev
+Homepage: https://github.com/dillo-browser/dillo
+Vcs-Git: https://github.com/BunsenLabs/dillo-browser.git
+Vcs-Browser: https://github.com/BunsenLabs/dillo-browser
 Rules-Requires-Root: no
 
 Package: dillo
