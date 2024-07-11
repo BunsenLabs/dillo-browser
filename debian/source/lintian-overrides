@@ -1,0 +1,3 @@
+# lintian bugs #1017966  #1019980 #864555 ?
+dillo: source-is-missing [doc/user_help.in.html]
+dillo: source-is-missing [test/html/manual/*.html]
