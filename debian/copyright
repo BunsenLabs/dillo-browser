@@ -5,6 +5,8 @@ License: GPL-3+
 
 Files: *
 Copyright: 1999-2011, Jorge Arellano Cid <jcid@dillo.org>
+           2023 Michal Grezl <walley@walley.org>
+           2023-2024 Rodrigo Arias Mallo <rodarima@gmail.com>
  Copyright holders:
  Jorge Arellano Cid <jcid@dillo.org>
  Sebastian Geerken <sgeerken@dillo.org>
@@ -26,22 +28,12 @@ Copyright: 1999-2011, Jorge Arellano Cid <jcid@dillo.org>
  Eric Gaudet
 License: GPL-3+
 
-Files: dpi/https.c
-Copyright: 2003, 2004 Jorge Arellano Cid <jcid@dillo.org>
-           2004 Garrett Kajmowicz <gkajmowi@tbaytel.net>
-License: GPL-3+ with OpenSSL exception
- As a special exception permission is granted to link the code of
- the https dillo plugin with the OpenSSL project's "OpenSSL"
- library, and distribute the linked executables, without including
- the source code for OpenSSL in the source distribution. You must
- obey the GNU General Public License, version 3, in all respects
- for all of the code used other than "OpenSSL".
-
 Files: debian/*
 Copyright: 2000-2002 Ron Farrer <rbf@debian.org>,
            2002-2005 Phil Blundell <pb@debian.org>,
            2005 Gürkan Sengün,
-           2011-2015 Axel Beckert <abe@debian.org>
+           2011-2022 Axel Beckert <abe@debian.org>
+           2023-2024 John Crawley <john@bunsenlabs.org>
 License: GPL-3+
 
 License: GPL-3+
