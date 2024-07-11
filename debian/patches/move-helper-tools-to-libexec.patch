@@ -1,0 +1,26 @@
+Description: Move helper binaries from /usr/bin/ to /usr/lib/…/dillo/
+Author: Axel Beckert <abe@debian.org>
+Bug-Debian: https://bugs.debian.org/919063
+Forwarded: no
+
+--- a/dpid/Makefile.am
++++ b/dpid/Makefile.am
+@@ -2,7 +2,7 @@
+ 	-I$(top_srcdir) \
+ 	-DDPIDRC_SYS='"$(sysconfdir)/dpidrc"'
+ 
+-bin_PROGRAMS = dpid dpidc
++pkglibexec_PROGRAMS = dpid dpidc
+ dpid_LDADD = \
+ 	$(top_builddir)/dpip/libDpip.a \
+ 	$(top_builddir)/dlib/libDlib.a
+--- a/src/IO/Makefile.am
++++ b/src/IO/Makefile.am
+@@ -1,6 +1,6 @@
+ AM_CPPFLAGS = \
+ 	-I$(top_srcdir) \
+-	-DDILLO_BINDIR='"$(bindir)/"'
++	-DDILLO_BINDIR='"$(pkglibexecdir)/"'
+ AM_CFLAGS = @LIBFLTK_CFLAGS@
+ AM_CXXFLAGS = @LIBFLTK_CXXFLAGS@
+ 

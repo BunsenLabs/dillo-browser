@@ -1,0 +1,13 @@
+Description: Don't use /usr/bin/env in script shebang lines
+ Required by Debian Policy §10.4.
+Author: Axel Beckert <abe@debian.org>
+Forwarded: no
+
+--- a/dillo-install-hyphenation
++++ b/dillo-install-hyphenation
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl
+ use POSIX;
+ use File::Basename;
+ use Net::FTP;

@@ -1,0 +1,5 @@
+fix-OpenSSL-1.1-detection.patch
+move-helper-tools-to-libexec.patch
+fix-perl-shebang.patch
+fix-duckduckgo-shortcut-in-dillorc.patch
+fix-FTBFS-with-gcc-10.patch
