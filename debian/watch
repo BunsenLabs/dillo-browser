@@ -1,3 +1,0 @@
-version=3
-opts=pgpsigurlmangle=s/$/.asc/ \
-https://www.dillo.org/download/dillo-(.*).tar.bz2
