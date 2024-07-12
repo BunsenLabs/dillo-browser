@@ -1,3 +1,12 @@
+dillo (3.1.1-0.1~bl3) carbon; urgency=medium
+
+  * Non-maintainer upload.
+  * Fix some lintian overrides.
+  * Build from v3.1.1 tarball from:
+     https://github.com/dillo-browser/dillo
+
+ -- John Crawley <john@bunsenlabs.org>  Fri, 12 Jul 2024 16:17:54 +0900
+
 dillo (3.1.1-0.1~bl2) carbon-trixie; urgency=medium
 
   * Non-maintainer upload.
