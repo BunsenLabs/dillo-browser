@@ -2,7 +2,6 @@
  * Key parser
  *
  * Copyright (C) 2009 Jorge Arellano Cid <jcid@dillo.org>
- * Copyright (C) 2024 Rodrigo Arias Mallo <rodarima@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -137,10 +136,6 @@ static const KeyBinding_t default_keys[] = {
    { "right"        , KEYS_RIGHT        , 0         , FL_Right        },
    { "top"          , KEYS_TOP          , 0         , FL_Home         },
    { "bottom"       , KEYS_BOTTOM       , 0         , FL_End          },
-   { "zoom-in"      , KEYS_ZOOM_IN      , FL_CTRL   , '+'             },
-   { "zoom-in"      , KEYS_ZOOM_IN      , FL_CTRL   , '=' /* US + */  },
-   { "zoom-out"     , KEYS_ZOOM_OUT     , FL_CTRL   , '-'             },
-   { "zoom-reset"   , KEYS_ZOOM_RESET   , FL_CTRL   , '0'             },
 };
 
 static Dlist *bindings;

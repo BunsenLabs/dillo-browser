@@ -1,15 +1,3 @@
-/*
- * File: bw.h
- *
- * Copyright (C) 2006-2011 Jorge Arellano Cid <jcid@dillo.org>
- * Copyright (C) 2024 Rodrigo Arias Mallo <rodarima@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- */
-
 #ifndef __BW_H__
 #define __BW_H__
 
@@ -69,9 +57,6 @@ typedef struct {
    /** HTML-bugs detected at parse time */
    int num_page_bugs;
    Dstr *page_bugs;
-
-   /* Zoom factor */
-   float zoom;
 } BrowserWindow;
 
 

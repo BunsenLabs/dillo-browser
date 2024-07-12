@@ -90,7 +90,6 @@ keywords. Generated for version __VERSION__.</p>
       <li><a href="#scrolling">Scrolling</a></li>
       <li><a href="#find-text">Find text</a></li>
       <li><a href="#copy-and-paste">Copy and paste</a></li>
-      <li><a href="#zoom">Zoom</a></li>
     </ul>
   </li>
   <li><a href="#navigation">Navigation</a>
@@ -236,16 +235,6 @@ If you want to paste an URL into Dillo, do it on the "clear-URL"
 button (the "X" next to the <a href="#location-bar">location bar</a>).
 <p>
 
-<h3 id="zoom">Zoom</h3>
-<p>
-You can increase or decrease the size of the elements of a page by changing the
-zoom factor. Use <code>Ctrl +</code> to increase the size, <code>Ctrl -</code>
-to decrease it and <code>Ctrl 0</code> to reset the value to 100%.
-<p>
-The initial zoom factor is specified by the <code>zoom_factor</code> option in
-the <a href="#dillorc">dillorc</a> configuration file. When a new tab or window
-is opened, the current zoom factor value is inherited.
-
 <h2 id="navigation">Navigation</h2>
 This section focuses on how to navigate to other pages by following hyperlinks,
 using bookmarks, typing or pasting a new URL or using the history.
@@ -329,8 +318,7 @@ DuckDuckGo for the keywords "dillo browser".
 <p>
 Dillo can open different web pages into tabs. To open a link in a new tab click
 the middle button instead of the left button. The same applies to buttons to
-submit a form. A new tab can also be opened from the <code>File</code> menu or
-using the shortcut <code>Ctrl+T</code>.
+submit a form.
 <p>
 By default the new tab will be automatically focused. If you want to change
 this behaviour, adjust the following options in the 
@@ -348,13 +336,6 @@ tabs). You can also close the tab by clicking with the right button on the tab
 label. The middle button can be used instead by setting the option:
 <pre>
 right_click_closes_tab=NO
-</pre>
-<p>
-Use the <code>new_tab_page</code> option to control which page is loaded in a
-newly opened tab, by default is an empty page. To open the
-bookmarks page set the following line in <a href="#dillorc">dillorc</a>:
-<pre>
-new_tab_page="dpi:/bm/"
 </pre>
 
 <h3 id="bookmarks">Bookmarks</h3>
@@ -789,9 +770,6 @@ The list of default bindings is given in the following table.
 <tr><td>Ctrl-U                     <td>                <td>View source
 <tr><td>Ctrl-B                     <td>Bookmarks       <td>View bookmarks
 <tr><td>Ctrl-Q                     <td>Quit            <td>Quit dillo
-<tr><td>Ctrl-+ or Ctrl-=           <td>Bigger          <td>Zoom in
-<tr><td>Ctrl--                     <td>Smaller         <td>Zoom out
-<tr><td>Ctrl-0                     <td>100%            <td>Reset zoom to 100%
 <tr><td>Back       or "<b>,</b>"   <td>&lt;            <td>Previous page
 <tr><td>Shift-Back or "<b>.</b>"   <td>&gt;            <td>Next page
 <tr><td>Alt-F                      <td>File            <td>File menu

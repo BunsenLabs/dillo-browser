@@ -2,7 +2,6 @@
  * Key parser
  *
  * Copyright (C) 2009 Jorge Arellano Cid <jcid@dillo.org>
- * Copyright (C) 2024 Rodrigo Arias Mallo <rodarima@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,10 +47,7 @@ typedef enum {
    KEYS_LEFT,
    KEYS_RIGHT,
    KEYS_TOP,
-   KEYS_BOTTOM,
-   KEYS_ZOOM_IN,
-   KEYS_ZOOM_OUT,
-   KEYS_ZOOM_RESET
+   KEYS_BOTTOM
 } KeysCommand_t;
 
 class Keys {

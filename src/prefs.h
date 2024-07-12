@@ -48,7 +48,6 @@ typedef struct {
    char *no_proxy;
    DilloUrl *start_page;
    DilloUrl *home;
-   DilloUrl *new_tab_page;
    bool_t allow_white_bg;
    int32_t white_bg_replacement;
    int32_t bg_color;
@@ -73,7 +72,6 @@ typedef struct {
    bool_t adjust_table_min_width;
    bool_t focus_new_tab;
    double font_factor;
-   double zoom_factor;
    int32_t font_max_size;
    int32_t font_min_size;
    int32_t scroll_step;

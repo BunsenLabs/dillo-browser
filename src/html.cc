@@ -172,20 +172,11 @@ DilloUrl *a_Html_url_new(DilloHtml *html,
                          const char *url_str, const char *base_url,
                          int use_base_url)
 {
-   if (!url_str) {
-      MSG("a_Html_url_new: URL is NULL\n");
-      return NULL;
-   }
-
-   DilloUrl *url = a_Url_new(url_str,
-                   (use_base_url) ? base_url : URL_STR_(html->base_url));
-
-   if (!url) {
-      BUG_MSG("URL is not valid '%s'.", url_str);
-      return NULL;
-   }
-
+   DilloUrl *url;
    int n_ic, n_ic_spc;
+
+   url = a_Url_new(url_str,
+                   (use_base_url) ? base_url : URL_STR_(html->base_url));
    if ((n_ic = URL_ILLEGAL_CHARS(url)) != 0) {
       const char *suffix = (n_ic) > 1 ? "s" : "";
       n_ic_spc = URL_ILLEGAL_CHARS_SPC(url);
@@ -461,7 +452,7 @@ DilloHtml::DilloHtml(BrowserWindow *p_bw, const DilloUrl *url,
    DocType = DT_NONE;    /* assume Tag Soup 0.0!   :-) */
    DocTypeVersion = 0.0f;
 
-   styleEngine = new StyleEngine (HT2LT (this), page_url, base_url, bw->zoom);
+   styleEngine = new StyleEngine (HT2LT (this), page_url, base_url);
 
    cssUrls = new misc::SimpleVector <DilloUrl*> (1);
 
@@ -1706,14 +1697,10 @@ static void Html_tag_open_title(DilloHtml *html, const char *tag, int tagsize)
  */
 static void Html_tag_close_title(DilloHtml *html)
 {
-   /* title is only valid inside HEAD */
    if (html->InFlags & IN_HEAD && html->Num_TITLE == 1) {
-      /* Ignore empty titles: <title></title> */
-      char *title = html->Stash->str;
-      if (!title || title[0] == '\0')
-         return;
-      a_UIcmd_set_page_title(html->bw, title);
-      a_History_set_title_by_url(html->page_url, title);
+      /* title is only valid inside HEAD */
+      a_UIcmd_set_page_title(html->bw, html->Stash->str);
+      a_History_set_title_by_url(html->page_url, html->Stash->str);
    }
 }
 
@@ -3152,28 +3139,19 @@ static void Html_tag_open_meta(DilloHtml *html, const char *tag, int tagsize)
             sprintf(delay_str, ".");
          }
          /* Skip to anything after "URL=" or ";" if "URL=" is not found */
-         int has_url = 1;
          if ((p = dStriAsciiStr(content, "url=")))
             content = p + strlen("url=");
          else if ((p = strstr(content, ";")))
             content = p + strlen(";");
-         else
-            has_url = 0;
-
-         if (has_url) {
-            /* Handle the case of a quoted URL */
-            if (*content == '"' || *content == '\'') {
-               if ((p = strchr(content + 1, *content)))
-                  mr_url = dStrndup(content + 1, p - content - 1);
-               else
-                  mr_url = dStrdup(content + 1);
-            } else {
-               mr_url = dStrdup(content);
-            }
+         /* Handle the case of a quoted URL */
+         if (*content == '"' || *content == '\'') {
+            if ((p = strchr(content + 1, *content)))
+               mr_url = dStrndup(content + 1, p - content - 1);
+            else
+               mr_url = dStrdup(content + 1);
          } else {
-            mr_url = dStrdup("");
+            mr_url = dStrdup(content);
          }
-
          new_url = a_Html_url_new(html, mr_url, NULL, 0);
 
          if (a_Url_cmp(html->base_url, new_url) == 0) {
@@ -3577,11 +3555,8 @@ static const TagInfo Tags[] = {
 };
 #define NTAGS (sizeof(Tags)/sizeof(Tags[0]))
 
-/* Only available in C++11 and up */
-#if __cpp_static_assert
 static_assert(NTAGS == HTML_NTAGS,
    "Mismatch between number of tags in Tags and HTML_NTAGS");
-#endif
 
 /*
  * Compares tag from buffer ('/' or '>' or space-ended string) [p1]

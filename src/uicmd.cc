@@ -576,13 +576,9 @@ BrowserWindow *a_UIcmd_browser_window_new(int ww, int wh,
    new_bw = UIcmd_tab_new(DilloTabs, old_ui, focus);
    win->show();
 
-   if (old_bw == NULL) {
-      new_bw->zoom = prefs.zoom_factor;
-
-      if (prefs.xpos >= 0 && prefs.ypos >= 0) {
-         // position the first window according to preferences
-         DilloTabs->window()->position(prefs.xpos, prefs.ypos);
-      }
+   if (old_bw == NULL && prefs.xpos >= 0 && prefs.ypos >= 0) {
+      // position the first window according to preferences
+      DilloTabs->window()->position(prefs.xpos, prefs.ypos);
    }
 
    win->callback(win_cb, DilloTabs);
@@ -774,11 +770,6 @@ void a_UIcmd_open_url(BrowserWindow *bw, const DilloUrl *url)
 
 static void UIcmd_open_url_nbw(BrowserWindow *new_bw, const DilloUrl *url)
 {
-   if (!url && prefs.new_tab_page) {
-      if (strcmp(URL_STR(prefs.new_tab_page), "about:blank") != 0)
-         url = prefs.new_tab_page;
-   }
-
    /* When opening a new BrowserWindow (tab or real window) we focus
     * Location if we don't yet have an URL, main otherwise.
     */
@@ -803,8 +794,6 @@ void a_UIcmd_open_url_nw(BrowserWindow *bw, const DilloUrl *url)
    a_UIcmd_get_wh(bw, &w, &h);
    new_bw = a_UIcmd_browser_window_new(w, h, 0, bw);
 
-   /* Preserve same zoom factor in new window */
-   new_bw->zoom = bw->zoom;
    UIcmd_open_url_nbw(new_bw, url);
 }
 
@@ -816,8 +805,6 @@ void a_UIcmd_open_url_nt(void *vbw, const DilloUrl *url, int focus)
    BrowserWindow *bw = (BrowserWindow *)vbw;
    BrowserWindow *new_bw = UIcmd_tab_new(BW2UI(bw)->tabs(),
                                          bw ? BW2UI(bw) : NULL, focus);
-   /* Preserve same zoom factor in new tab */
-   new_bw->zoom = bw->zoom;
    UIcmd_open_url_nbw(new_bw, url);
 }
 
@@ -883,51 +870,6 @@ void a_UIcmd_repush(void *vbw)
 void a_UIcmd_redirection0(void *vbw, const DilloUrl *url)
 {
    a_Nav_redirection0((BrowserWindow*)vbw, url);
-}
-
-/*
- * Zoom in
- */
-void a_UIcmd_zoom_in(void *vbw)
-{
-   BrowserWindow *bw = (BrowserWindow*) vbw;
-   bw->zoom += 0.10;
-
-   if (bw->zoom > 10.0)
-      bw->zoom = 10.0;
-
-   a_UIcmd_set_msg(bw, "Zoom set to %.0f%%", bw->zoom * 100.0);
-
-   a_Nav_repush((BrowserWindow*)vbw);
-}
-
-/*
- * Zoom out
- */
-void a_UIcmd_zoom_out(void *vbw)
-{
-   BrowserWindow *bw = (BrowserWindow*) vbw;
-   bw->zoom -= 0.10;
-
-   if (bw->zoom < 0.10)
-      bw->zoom = 0.10;
-
-   a_UIcmd_set_msg(bw, "Zoom set to %.0f%%", bw->zoom * 100.0);
-
-   a_Nav_repush((BrowserWindow*)vbw);
-}
-
-/*
- * Zoom reset
- */
-void a_UIcmd_zoom_reset(void *vbw)
-{
-   BrowserWindow *bw = (BrowserWindow*) vbw;
-   bw->zoom = 1.0;
-
-   a_UIcmd_set_msg(bw, "Zoom set to %.0f%%", bw->zoom * 100.0);
-
-   a_Nav_repush((BrowserWindow*)vbw);
 }
 
 /*
